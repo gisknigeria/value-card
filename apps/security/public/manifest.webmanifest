@@ -1,0 +1,36 @@
+{
+  "name": "SIGAR Bodija Community",
+  "short_name": "SIGAR Bodija",
+  "description": "Bodija community security, gate verification and rapid response.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#07111f",
+  "theme_color": "#07111f",
+  "categories": ["government", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Open command map",
+      "short_name": "Map",
+      "description": "Open the live SIGAR Bodija community security map.",
+      "url": "/",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "192x192", "type": "image/svg+xml" }]
+    }
+  ]
+}

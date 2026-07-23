@@ -1,0 +1,59 @@
+services:
+  - type: web
+    name: bodija-value-card-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: apps/api
+    buildCommand: npm install --workspaces=false --no-audit --no-fund && npm run prisma:generate --workspaces=false && npm run build --workspaces=false
+    startCommand: npm run prisma:deploy --workspaces=false && npm run prisma:seed --workspaces=false && node dist/main.js
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_INITIAL_PASSWORD
+        sync: false
+      - key: WEB_ORIGIN
+        sync: false
+
+  - type: web
+    name: bodija-value-card-web
+    runtime: static
+    rootDir: apps/web
+    buildCommand: npm install --workspaces=false --no-audit --no-fund && npm run build --workspaces=false
+    staticPublishPath: ./dist
+    autoDeployTrigger: commit
+    envVars:
+      - key: VITE_API_URL
+        sync: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+  - type: web
+    name: sigar-bodija-community
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: apps/security
+    buildCommand: npm install --workspaces=false --no-audit --no-fund && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true

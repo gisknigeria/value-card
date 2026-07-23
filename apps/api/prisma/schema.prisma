@@ -1,0 +1,356 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  RESIDENT
+  MERCHANT
+  SECURITY
+  ADMIN
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum CardStatus {
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+enum BenefitType {
+  PERCENTAGE_DISCOUNT
+  FIXED_RATE
+  FREE_SERVICE
+  LOYALTY_POINTS
+  MERCHANT_CREDIT
+  VOUCHER
+}
+
+enum RedemptionModel {
+  IMMEDIATE
+  ACCUMULATED
+}
+
+enum OfferStatus {
+  ACTIVE
+  PAUSED
+  PENDING
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  RESIDENT_REVIEWER
+  MERCHANT_REVIEWER
+  SUPPORT
+  AUDITOR
+  REPORTER
+}
+
+enum MerchantUserRole {
+  OWNER
+  STAFF
+}
+
+enum ComplaintStatus {
+  OPEN
+  INVESTIGATING
+  RESOLVED
+  CLOSED
+}
+
+model User {
+  id           String     @id @default(cuid())
+  phone        String     @unique
+  email        String?    @unique
+  passwordHash String
+  role         UserRole
+  adminRole    AdminRole?
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  resident     Resident?
+  merchantUser MerchantUser?
+  loggedTransactions Transaction[] @relation("LoggedBy")
+  notifications Notification[]
+}
+
+model Resident {
+  id               String         @id @default(cuid())
+  userId           String         @unique
+  user             User           @relation(fields: [userId], references: [id])
+  fullName         String
+  neighbourhood    String
+  memberCategory   String
+  approvalStatus   ApprovalStatus @default(PENDING)
+  statusReason     String?
+  statusChangedAt  DateTime?
+  statusChangedBy  String?
+  consentedAt      DateTime
+  photoUrl         String?
+  createdAt        DateTime       @default(now())
+  card             Card?
+  dependants       Dependant[]
+  transactions     Transaction[]
+  renewals         Renewal[]
+  complaints       Complaint[]
+  rewardBalances   RewardBalance[]
+  cardHistory      CardHistory[]
+  rewardLedger     RewardLedger[]
+}
+
+model Dependant {
+  id              String         @id @default(cuid())
+  residentId      String
+  resident        Resident       @relation(fields: [residentId], references: [id])
+  fullName        String
+  relationship    String
+  phone           String?
+  approvalStatus  ApprovalStatus @default(PENDING)
+  statusReason    String?
+  statusChangedAt DateTime?
+  statusChangedBy String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([residentId])
+}
+
+model Card {
+  id           String        @id @default(cuid())
+  residentId   String        @unique
+  resident     Resident      @relation(fields: [residentId], references: [id])
+  membershipId String        @unique
+  qrToken      String        @unique
+  status       CardStatus    @default(PENDING_VERIFICATION)
+  issuedAt     DateTime?
+  expiresAt    DateTime?
+  scans        VerificationScan[]
+  history      CardHistory[]
+}
+
+model Merchant {
+  id              String            @id @default(cuid())
+  businessName    String            @unique
+  category        String
+  contactPerson   String
+  phone           String
+  email           String?
+  location        String
+  approvalStatus  ApprovalStatus    @default(PENDING)
+  statusReason    String?
+  statusChangedAt DateTime?
+  statusChangedBy String?
+  createdAt       DateTime          @default(now())
+  users           MerchantUser[]
+  offers          Offer[]
+  transactions    Transaction[]
+  complaints      Complaint[]
+  rewardBalances  RewardBalance[]
+  rewardLedger    RewardLedger[]
+
+  @@index([approvalStatus])
+}
+
+model MerchantUser {
+  id         String           @id @default(cuid())
+  userId     String           @unique
+  merchantId String
+  role       MerchantUserRole @default(OWNER)
+  isActive   Boolean          @default(true)
+  user       User             @relation(fields: [userId], references: [id])
+  merchant   Merchant         @relation(fields: [merchantId], references: [id])
+
+  @@index([merchantId])
+}
+
+model Offer {
+  id              String          @id @default(cuid())
+  merchantId      String
+  merchant        Merchant        @relation(fields: [merchantId], references: [id])
+  title           String
+  benefitType     BenefitType
+  value           Decimal?
+  displayValue    String
+  redemptionModel RedemptionModel
+  redemptionRule  String
+  validFrom       DateTime
+  validUntil      DateTime?
+  status          OfferStatus     @default(PENDING)
+  createdById     String?
+  updatedAt       DateTime        @updatedAt
+  transactions    Transaction[]
+  versions        OfferVersion[]
+
+  @@index([merchantId])
+  @@index([status])
+}
+
+model OfferVersion {
+  id              String          @id @default(cuid())
+  offerId         String
+  offer           Offer           @relation(fields: [offerId], references: [id])
+  title           String
+  benefitType     BenefitType
+  value           Decimal?
+  displayValue    String
+  redemptionModel RedemptionModel
+  redemptionRule  String
+  validFrom       DateTime
+  validUntil      DateTime?
+  status          OfferStatus
+  changedById     String?
+  changeNote      String?
+  createdAt       DateTime        @default(now())
+
+  @@index([offerId])
+}
+
+model Transaction {
+  id              String          @id @default(cuid())
+  residentId      String
+  merchantId      String
+  offerId         String?
+  loggedById      String
+  resident        Resident        @relation(fields: [residentId], references: [id])
+  merchant        Merchant        @relation(fields: [merchantId], references: [id])
+  offer           Offer?          @relation(fields: [offerId], references: [id])
+  loggedBy        User            @relation("LoggedBy", fields: [loggedById], references: [id])
+  purchaseAmount  Decimal?
+  benefitValue    Decimal
+  redemptionModel RedemptionModel
+  auditStatus     String          @default("PENDING")
+  auditFlag       String?
+  auditNote       String?
+  auditedById     String?
+  auditedAt       DateTime?
+  reversalOfId    String?
+  reversedById    String?
+  reversalReason  String?
+  reversedAt      DateTime?
+  idempotencyKey  String?         @unique
+  createdAt       DateTime        @default(now())
+
+  @@index([merchantId])
+  @@index([residentId])
+  @@index([createdAt])
+  @@index([auditStatus])
+}
+
+model RewardLedger {
+  id            String   @id @default(cuid())
+  residentId    String
+  merchantId    String
+  transactionId String?
+  amount        Decimal
+  type          String
+  note          String?
+  resident      Resident @relation(fields: [residentId], references: [id])
+  merchant      Merchant @relation(fields: [merchantId], references: [id])
+  createdAt     DateTime @default(now())
+
+  @@index([residentId])
+  @@index([merchantId])
+}
+
+model RewardBalance {
+  id         String   @id @default(cuid())
+  residentId String
+  merchantId String
+  balance    Decimal  @default(0)
+  resident   Resident @relation(fields: [residentId], references: [id])
+  merchant   Merchant @relation(fields: [merchantId], references: [id])
+  updatedAt  DateTime @updatedAt
+  @@unique([residentId, merchantId])
+}
+
+model Renewal {
+  id          String         @id @default(cuid())
+  residentId  String
+  resident    Resident       @relation(fields: [residentId], references: [id])
+  status      ApprovalStatus @default(PENDING)
+  reason      String?
+  note        String?
+  processedBy String?
+  requestedAt DateTime       @default(now())
+  processedAt DateTime?
+
+  @@index([residentId])
+}
+
+model CardHistory {
+  id           String     @id @default(cuid())
+  cardId       String
+  residentId   String
+  card         Card       @relation(fields: [cardId], references: [id])
+  resident     Resident   @relation(fields: [residentId], references: [id])
+  membershipId String
+  status       CardStatus
+  issuedAt     DateTime?
+  expiresAt    DateTime?
+  renewalId    String?
+  note         String?
+  createdAt    DateTime   @default(now())
+
+  @@index([cardId])
+  @@index([residentId])
+}
+
+model Complaint {
+  id           String          @id @default(cuid())
+  residentId   String
+  merchantId   String?
+  resident     Resident        @relation(fields: [residentId], references: [id])
+  merchant     Merchant?       @relation(fields: [merchantId], references: [id])
+  subject      String
+  description  String
+  status       ComplaintStatus @default(OPEN)
+  assignedTo   String?
+  adminNote    String?
+  resolvedAt   DateTime?
+  resolvedById String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([status])
+  @@index([residentId])
+}
+
+model VerificationScan {
+  id             String   @id @default(cuid())
+  cardId         String
+  card           Card     @relation(fields: [cardId], references: [id])
+  verifierId     String
+  merchantId     String?
+  staffUserId    String?
+  deviceInfo     String?
+  idempotencyKey String?  @unique
+  result         String
+  createdAt      DateTime @default(now())
+
+  @@index([merchantId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
