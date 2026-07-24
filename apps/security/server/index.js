@@ -211,6 +211,26 @@ async function initPostgres() {
     );
     create index if not exists visitor_passes_code_idx on visitor_passes (code);
     create index if not exists "visitor_passes_residentId_idx" on visitor_passes ("residentId");
+    -- Walk-in guest log table
+    create table if not exists walk_in_logs (
+      id text primary key,
+      guest_name text not null,
+      guest_phone text,
+      destination_merchant_id text not null,
+      destination_name text not null,
+      gate text not null,
+      logged_by text not null,
+      entry_time timestamptz default now(),
+      exit_time timestamptz,
+      exit_code text unique,
+      acknowledged boolean not null default false,
+      acknowledged_at timestamptz,
+      acknowledged_by text,
+      notes text
+    );
+    create index if not exists walk_in_logs_merchant_idx on walk_in_logs (destination_merchant_id);
+    create index if not exists walk_in_logs_exit_code_idx on walk_in_logs (exit_code) where exit_code is not null;
+    create index if not exists walk_in_logs_entry_time_idx on walk_in_logs (entry_time desc);
   `);
   const { rows } = await pool.query('select count(*)::int as count from users');
   await pool.query("delete from incidents where id in ('i1','i2','i3') or created_by='seed'");
@@ -428,8 +448,8 @@ const visibleUsersFor = (viewer, users) => {
   return visibleUsers.filter(user => canManageRank(viewer.rank, user.rank));
 };
 const canCreateUser = (viewer, rank, role) => {
-  if (viewer.role === 'Super Admin') return ['Officer', 'Admin', 'Super Admin'].includes(role);
-  if (viewer.role === 'Admin') return role === 'Officer';
+  if (viewer.role === 'Super Admin') return ['Officer', 'Admin', 'Super Admin', 'Access Point'].includes(role);
+  if (viewer.role === 'Admin') return ['Officer', 'Access Point'].includes(role);
   return role === 'Officer' && canManageRank(viewer.rank, rank);
 };
 const canDeleteUser = (viewer, target) => {
@@ -874,13 +894,190 @@ app.post('/api/visitor/verify', auth, asyncRoute(async (req, res) => {
   });
 }));
 
+// ── Walk-in guest log (Access Point flow) ─────────────────────────────────
+
+// GET /api/merchants/list — list approved merchants for the destination picker
+app.get('/api/merchants/list', auth, asyncRoute(async (req, res) => {
+  if (!pool) return res.json({ merchants: [] });
+  const { rows } = await pool.query(
+    `select id, "businessName" as name, category, location
+     from "Merchant"
+     where "approvalStatus" = 'APPROVED'
+     order by "businessName" asc`
+  );
+  res.json({ merchants: rows });
+}));
+
+// POST /api/walkin — log a new walk-in guest
+app.post('/api/walkin', auth, asyncRoute(async (req, res) => {
+  if (!pool) return res.status(503).json({ message: 'Database required for walk-in logging' });
+  const guestName    = String(req.body.guestName || '').trim().slice(0, 120);
+  const guestPhone   = String(req.body.guestPhone || '').trim().slice(0, 30) || null;
+  const merchantId   = String(req.body.merchantId || '').trim();
+  const merchantName = String(req.body.merchantName || '').trim().slice(0, 120);
+  const gate         = String(req.body.gate || 'Main Gate').trim().slice(0, 80);
+  const notes        = req.body.notes ? String(req.body.notes).trim().slice(0, 300) : null;
+  if (!guestName) return res.status(400).json({ message: 'Guest name is required' });
+  if (!merchantId) return res.status(400).json({ message: 'Destination merchant is required' });
+
+  const id = `wl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  await pool.query(
+    `insert into walk_in_logs
+      (id, guest_name, guest_phone, destination_merchant_id, destination_name, gate, logged_by, notes, entry_time)
+     values ($1,$2,$3,$4,$5,$6,$7,$8, now())`,
+    [id, guestName, guestPhone, merchantId, merchantName, gate, req.user.id, notes],
+  );
+  const { rows } = await pool.query(`select * from walk_in_logs where id = $1`, [id]);
+  const log = rows[0];
+
+  // Push real-time notification to merchant's socket room
+  io.to(`merchant:${merchantId}`).emit('walkin:arriving', {
+    id: log.id,
+    guestName:   log.guest_name,
+    guestPhone:  log.guest_phone,
+    gate:        log.gate,
+    entryTime:   log.entry_time,
+    notes:       log.notes,
+    merchantId,
+  });
+
+  res.json({ walkIn: toWalkIn(log) });
+}));
+
+// GET /api/walkin?merchantId= — list active walk-ins (for merchant dashboard)
+app.get('/api/walkin', auth, asyncRoute(async (req, res) => {
+  if (!pool) return res.json({ walkIns: [] });
+  const merchantId = String(req.query.merchantId || '').trim();
+  const { rows } = await pool.query(
+    `select * from walk_in_logs
+     where (destination_merchant_id = $1 or $1 = '')
+       and exit_time is null
+     order by entry_time desc
+     limit 50`,
+    [merchantId],
+  );
+  res.json({ walkIns: rows.map(toWalkIn) });
+}));
+
+// POST /api/walkin/:id/acknowledge — merchant acknowledges guest, generates exit code
+app.post('/api/walkin/:id/acknowledge', asyncRoute(async (req, res) => {
+  // This endpoint is called from the MERCHANT app using the BERA JWT secret
+  if (!pool) return res.status(503).json({ message: 'Database required' });
+  const beraToken = (req.headers.authorization || '').replace('Bearer ', '');
+  if (!beraToken) return res.status(401).json({ message: 'Authorization required' });
+  let merchantPayload;
+  try {
+    merchantPayload = jwt.verify(beraToken, process.env.BERA_JWT_SECRET || process.env.JWT_SECRET || secret);
+  } catch { return res.status(401).json({ message: 'Invalid or expired merchant session' }); }
+  if (merchantPayload.role !== 'MERCHANT') return res.status(403).json({ message: 'Merchant access required' });
+
+  const { id } = req.params;
+  const { rows: existing } = await pool.query(`select * from walk_in_logs where id = $1`, [id]);
+  if (!existing[0]) return res.status(404).json({ message: 'Walk-in log not found' });
+  if (existing[0].acknowledged) return res.json({ walkIn: toWalkIn(existing[0]) }); // idempotent
+
+  // Generate unique 6-digit exit code
+  let exitCode;
+  for (let i = 0; i < 20; i++) {
+    const candidate = String(Math.floor(100000 + Math.random() * 900000));
+    const { rows: clash } = await pool.query(
+      `select id from walk_in_logs where exit_code = $1 and exit_time is null`, [candidate]
+    );
+    if (!clash.length) { exitCode = candidate; break; }
+  }
+  if (!exitCode) exitCode = String(Date.now()).slice(-6);
+
+  await pool.query(
+    `update walk_in_logs
+     set acknowledged = true, acknowledged_at = now(), acknowledged_by = $2, exit_code = $3
+     where id = $1`,
+    [id, merchantPayload.sub, exitCode],
+  );
+
+  const { rows } = await pool.query(`select * from walk_in_logs where id = $1`, [id]);
+  const log = rows[0];
+
+  // Broadcast to security officers that merchant acknowledged
+  io.emit('walkin:acknowledged', {
+    id: log.id,
+    guestName:  log.guest_name,
+    exitCode:   log.exit_code,
+    merchantId: log.destination_merchant_id,
+    merchantName: log.destination_name,
+  });
+
+  res.json({ walkIn: toWalkIn(log) });
+}));
+
+// POST /api/walkin/exit — security verifies exit code and marks guest as exited
+app.post('/api/walkin/exit', auth, asyncRoute(async (req, res) => {
+  if (!pool) return res.status(503).json({ message: 'Database required' });
+  const exitCode = String(req.body.exitCode || '').trim();
+  const gate     = String(req.body.gate || 'Main Gate').trim().slice(0, 80);
+  if (!exitCode) return res.status(400).json({ message: 'Exit code is required' });
+
+  const { rows } = await pool.query(
+    `select * from walk_in_logs where exit_code = $1 limit 1`, [exitCode]
+  );
+  const log = rows[0];
+  if (!log) return res.status(404).json({ decision: 'DENIED', reason: 'Exit code not found or already used' });
+  if (!log.acknowledged) return res.status(403).json({ decision: 'DENIED', reason: 'Merchant has not yet acknowledged this guest. Guest cannot exit.' });
+  if (log.exit_time) return res.status(409).json({ decision: 'DENIED', reason: 'This exit code has already been used' });
+
+  await pool.query(
+    `update walk_in_logs set exit_time = now() where id = $1`, [log.id]
+  );
+
+  // Log in access events
+  const eventId = `exit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  await pool.query(
+    `insert into security_access_events
+      (id, resident_name, direction, gate, decision, reason, scan_note, is_override, scanned_by)
+     values ($1,$2,'EXIT',$3,'ALLOWED','Walk-in guest exiting',$4,false,$5)`,
+    [eventId, log.guest_name, gate, `Visited: ${log.destination_name}`, req.user.id],
+  );
+
+  io.to('gate-events').emit('gate:event', {
+    id: eventId, decision: 'ALLOWED', direction: 'EXIT', gate,
+    reason: `Walk-in guest exiting — visited ${log.destination_name}`,
+    membershipId: 'WALK-IN',
+    residentName: log.guest_name,
+    scannedAt: new Date().toISOString(),
+  });
+
+  res.json({
+    decision: 'ALLOWED',
+    reason:   `${log.guest_name} is cleared to exit`,
+    guestName:    log.guest_name,
+    destination:  log.destination_name,
+    entryTime:    log.entry_time,
+    exitTime:     new Date().toISOString(),
+  });
+}));
+
+const toWalkIn = row => ({
+  id:           row.id,
+  guestName:    row.guest_name,
+  guestPhone:   row.guest_phone || null,
+  merchantId:   row.destination_merchant_id,
+  merchantName: row.destination_name,
+  gate:         row.gate,
+  loggedBy:     row.logged_by,
+  entryTime:    row.entry_time?.toISOString?.() || row.entry_time,
+  exitTime:     row.exit_time?.toISOString?.() || null,
+  exitCode:     row.exit_code || null,
+  acknowledged: row.acknowledged || false,
+  acknowledgedAt: row.acknowledged_at?.toISOString?.() || null,
+  notes:        row.notes || null,
+});
+
 app.post('/api/users', auth, asyncRoute(async (req, res) => {
   if (!canManageUsers(req.user)) return res.status(403).json({ message: 'You do not have lower ranks to manage' });
   const email = String(req.body.email || '').trim().toLowerCase();
   const role = req.body.role || 'Officer';
-  const rank = String(req.body.rank || '').trim();
+  const rank = role === 'Access Point' ? 'Access Point' : String(req.body.rank || '').trim();
   if (!req.body.name || !email || !req.body.password) return res.status(400).json({ message: 'Name, email and password are required' });
-  if (!rank) return res.status(400).json({ message: 'Rank is required' });
+  if (role !== 'Access Point' && !rank) return res.status(400).json({ message: 'Rank is required' });
   if (!canCreateUser(req.user, rank, role)) return res.status(403).json({ message: 'You can only create accounts below your rank' });
   if ((await store.users()).some(user => user.email.toLowerCase() === email)) return res.status(409).json({ message: 'An account with that email already exists' });
   const user = {
@@ -889,7 +1086,7 @@ app.post('/api/users', auth, asyncRoute(async (req, res) => {
     password: await bcrypt.hash(req.body.password, 10),
     role, rank,
     active: true,
-    unit: req.body.unit || 'Field Unit',
+    unit: req.body.unit || (role === 'Access Point' ? 'Gate' : 'Field Unit'),
     unitType: String(req.body.unitType || 'Division').trim(),
     command: String(req.body.command || '').trim(),
     division: String(req.body.division || '').trim(),
@@ -1044,6 +1241,11 @@ io.on('connection', socket => {
 
   // Join gate-events room — all authenticated SIGAR users receive live gate events
   socket.join('gate-events');
+
+  // Merchant portal clients register to receive walk-in notifications for their merchant
+  socket.on('merchant:register', ({ merchantId }) => {
+    if (merchantId) socket.join(`merchant:${merchantId}`);
+  });
 
   // GPS updates — identify the sending user
   socket.on('gps:update', point => {

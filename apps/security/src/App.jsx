@@ -1845,6 +1845,7 @@ function OfficerManager({
                   onChange={(e) => setForm({ ...form, role: e.target.value })}
                 >
                   <option>Officer</option>
+                  <option value="Access Point">Access Point</option>
                   <option value="Admin">Control Room Admin</option>
                 </select>
               </label>
@@ -4109,25 +4110,30 @@ function Dashboard({ session, onLogout }) {
       )
     : [];
   const save = async (form) => {
-    const item = await request("/incidents", session.token, {
+    const created = await request("/incidents", session.token, {
       method: "POST",
       body: JSON.stringify(form),
     });
     setIncidents((old) =>
-      old.some((i) => i.id === item.id) ? old : [item, ...old],
+      old.some((i) => i.id === created.id) ? old : [created, ...old],
     );
     setNewPoint(null);
-    setSelected(item);
+    setSelected(created);
     setDrawMode("");
     setNotice("Incident submitted successfully");
     setTimeout(() => setNotice(""), 2500);
-    const item = await request(`/incidents/${selected.id}`, session.token, {
+  };
+
+  const updateStatus = async (status) => {
+    if (!selected) return;
+    const updated = await request(`/incidents/${selected.id}`, session.token, {
       method: "PUT",
       body: JSON.stringify({ status }),
     });
-    setIncidents((old) => old.map((i) => (i.id === item.id ? item : i)));
-    setSelected(item);
+    setIncidents((old) => old.map((i) => (i.id === updated.id ? updated : i)));
+    setSelected(updated);
   };
+
   const deleteIncident = async () => {
     if (
       !selected ||
@@ -4136,6 +4142,7 @@ function Dashboard({ session, onLogout }) {
       )
     )
       return;
+
     const id = selected.id;
     await request(`/incidents/${id}`, session.token, { method: "DELETE" });
     setIncidents((old) => old.filter((i) => i.id !== id));
@@ -4143,12 +4150,14 @@ function Dashboard({ session, onLogout }) {
     setNotice("Incident deleted");
     setTimeout(() => setNotice(""), 2500);
     setHiddenReportIds((old) => {
-      const next = old.includes(report.id)
-        ? old.filter((id) => id !== report.id)
-        : [...old, report.id];
+      const next = old.includes(id)
+        ? old.filter((itemId) => itemId !== id)
+        : [...old, id];
       localStorage.setItem("hidden-report-ids", JSON.stringify(next));
       return next;
     });
+  };
+
   const jump = (e) => {
     e.preventDefault();
     const [lat, lng] = coords.split(",").map(Number);
@@ -6217,6 +6226,8 @@ function Dashboard({ session, onLogout }) {
   );
 }
 
+import AccessPointApp from "./AccessPointApp.jsx";
+
 export default function App() {
   const [session, setSession] = useState(() => {
     try {
@@ -6244,9 +6255,10 @@ export default function App() {
     sessionStorage.removeItem("command-session");
     setSession(null);
   };
-  return session ? (
-    <Dashboard session={session} onLogout={logout} />
-  ) : (
-    <Login onLogin={login} />
-  );
+  if (!session) return <Login onLogin={login} />;
+  // Access Point officers get a stripped-down gate interface — no map
+  if (session.user?.role === "Access Point") {
+    return <AccessPointApp session={session} onLogout={logout} />;
+  }
+  return <Dashboard session={session} onLogout={logout} />;
 }

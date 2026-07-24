@@ -356,6 +356,59 @@ export function deleteVisitorPass(token: string, id: string) {
   });
 }
 
+// ── Walk-in guest log (merchant side) ─────────────────────────────────────
+// These hit the SECURITY server, not the NestJS API
+
+export interface WalkInLog {
+  id: string;
+  guestName: string;
+  guestPhone: string | null;
+  merchantId: string;
+  merchantName: string;
+  gate: string;
+  loggedBy: string;
+  entryTime: string;
+  exitTime: string | null;
+  exitCode: string | null;
+  acknowledged: boolean;
+  acknowledgedAt: string | null;
+  notes: string | null;
+}
+
+const SECURITY_URL = (typeof import.meta !== 'undefined'
+  ? (import.meta as any).env?.VITE_SECURITY_API_URL
+  : '') || '';
+const securityBase = SECURITY_URL.replace(/\/$/, '');
+
+async function securityRequest<T>(path: string, token: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${securityBase}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...(options.headers as Record<string, string> || {}),
+    },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data as any).message || `Request failed (${res.status})`);
+  return data as T;
+}
+
+export function getMerchantWalkIns(token: string, merchantId: string) {
+  return securityRequest<{ walkIns: WalkInLog[] }>(
+    `/api/walkin?merchantId=${encodeURIComponent(merchantId)}`,
+    token,
+  );
+}
+
+export function acknowledgeWalkIn(token: string, walkInId: string) {
+  return securityRequest<{ walkIn: WalkInLog }>(
+    `/api/walkin/${walkInId}/acknowledge`,
+    token,
+    { method: 'POST' },
+  );
+}
+
 export function listRenewals(token: string, status?: ApprovalStatus | 'ALL', query?: string) {
   const params = new URLSearchParams();
   if (status && status !== 'ALL') params.set('status', status);

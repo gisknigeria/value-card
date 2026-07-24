@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   AlertTriangle,
   BadgeCheck,
   BarChart2,
+  Bell,
   CheckCircle2,
   Clock3,
   Eye,
@@ -48,6 +49,8 @@ import {
   reverseTransaction,
   redeemReward,
   getMerchantReport,
+  getMerchantWalkIns,
+  acknowledgeWalkIn,
   type MerchantSession,
   type MerchantUserProfile,
   type MerchantOffer,
@@ -57,6 +60,7 @@ import {
   type ScanResult,
   type MerchantTransaction,
   type MerchantReport,
+  type WalkInLog,
 } from './api';
 
 const MERCHANT_TOKEN_KEY = 'bodija-merchant-token';
@@ -1088,16 +1092,18 @@ function OffersPanel({ token, isApproved }: { token: string; isApproved: boolean
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────
-type MerchantView = 'overview' | 'scan' | 'offers' | 'transactions' | 'reports' | 'staff' | 'profile';
+type MerchantView = 'overview' | 'scan' | 'offers' | 'transactions' | 'reports' | 'walkins' | 'staff' | 'profile';
 
 function MerchantDashboard({ session, logout }: { session: MerchantSession; logout: () => void }) {
   const [view, setView] = useState<MerchantView>('overview');
   const [showChangePw, setShowChangePw] = useState(false);
   const [offers, setOffers] = useState<MerchantOffer[]>([]);
+  const [pendingWalkIns, setPendingWalkIns] = useState(0);
   const mu = session.merchantUser;
   const m = mu.merchant;
   const isOwner = mu.role === 'OWNER';
   const isApproved = m.approvalStatus === 'APPROVED';
+  const socketRef = useRef<any>(null);
 
   // Pre-load offers so ScanPanel can use them
   useEffect(() => {
@@ -1106,6 +1112,35 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
       .then(({ offers: items }) => setOffers(items))
       .catch(() => {});
   }, [isApproved, session.accessToken]);
+
+  // Poll for unacknowledged walk-ins + socket connection to receive live notifications
+  useEffect(() => {
+    if (!isApproved) return;
+
+    const loadPending = () => {
+      getMerchantWalkIns(session.accessToken, m.id)
+        .then(({ walkIns }) => setPendingWalkIns(walkIns.filter(w => !w.acknowledged).length))
+        .catch(() => {});
+    };
+    loadPending();
+
+    // Connect to security server socket to receive real-time walk-in alerts
+    const securityUrl = (import.meta as any).env?.VITE_SECURITY_API_URL || '';
+    if (securityUrl) {
+      try {
+        // Dynamic import to avoid bundling issues if socket.io-client not in web app
+        import('socket.io-client').then(({ io }) => {
+          const socket = io(securityUrl, { transports: ['polling', 'websocket'] });
+          socketRef.current = socket;
+          socket.on('connect', () => socket.emit('merchant:register', { merchantId: m.id }));
+          socket.on('walkin:arriving', () => { loadPending(); setPendingWalkIns(n => n + 1); });
+          socket.on('walkin:acknowledged', () => loadPending());
+        }).catch(() => {});
+      } catch { /* no socket available */ }
+    }
+
+    return () => { socketRef.current?.disconnect(); };
+  }, [isApproved, m.id, session.accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="admin-shell">
@@ -1160,6 +1195,20 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
               <BarChart2 size={16} /> Reports
             </button>
           )}
+          {isApproved && (
+            <button
+              className={view === 'walkins' ? 'active' : ''}
+              onClick={() => { setView('walkins'); setPendingWalkIns(0); }}
+              style={{ position: 'relative' }}
+            >
+              <Bell size={16} /> Walk-ins
+              {pendingWalkIns > 0 && (
+                <span style={{ position: 'absolute', top: 4, right: 4, minWidth: 16, height: 16, borderRadius: 8, background: '#dc2626', color: '#fff', fontSize: 9, fontWeight: 800, display: 'grid', placeItems: 'center', padding: '0 3px' }}>
+                  {pendingWalkIns}
+                </span>
+              )}
+            </button>
+          )}
           <button className={view === 'staff' ? 'active' : ''} onClick={() => setView('staff')}>
             <Users size={16} /> Staff
           </button>
@@ -1168,20 +1217,26 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
           </button>
         </div>
 
-        {view === 'overview'      && <MerchantOverview m={m} isApproved={isApproved} setView={setView} />}
-        {view === 'scan'          && <ScanPanel token={session.accessToken} offers={offers} />}
-        {view === 'offers'        && <OffersPanel token={session.accessToken} isApproved={isApproved} />}
-        {view === 'transactions'  && <TransactionsPanel token={session.accessToken} />}
-        {view === 'reports'       && <ReportsPanel token={session.accessToken} />}
-        {view === 'staff'         && <StaffPanel token={session.accessToken} isOwner={isOwner} />}
-        {view === 'profile'       && <MerchantProfile m={m} mu={mu} />}
+        {view === 'overview'     && <MerchantOverview m={m} isApproved={isApproved} setView={setView} pendingWalkIns={pendingWalkIns} />}
+        {view === 'scan'         && <ScanPanel token={session.accessToken} offers={offers} />}
+        {view === 'offers'       && <OffersPanel token={session.accessToken} isApproved={isApproved} />}
+        {view === 'transactions' && <TransactionsPanel token={session.accessToken} />}
+        {view === 'reports'      && <ReportsPanel token={session.accessToken} />}
+        {view === 'walkins'      && <WalkInsPanel token={session.accessToken} merchantId={m.id} />}
+        {view === 'staff'        && <StaffPanel token={session.accessToken} isOwner={isOwner} />}
+        {view === 'profile'      && <MerchantProfile m={m} mu={mu} />}
       </main>
     </div>
   );
 }
 
 // ── Overview panel ────────────────────────────────────────────────────
-function MerchantOverview({ m, isApproved, setView }: { m: MerchantUserProfile['merchant']; isApproved: boolean; setView: (v: MerchantView) => void }) {
+function MerchantOverview({ m, isApproved, setView, pendingWalkIns }: {
+  m: MerchantUserProfile['merchant'];
+  isApproved: boolean;
+  setView: (v: MerchantView) => void;
+  pendingWalkIns: number;
+}) {
   return (
     <section style={{ marginTop: 24 }}>
       {!isApproved && (
@@ -1195,10 +1250,24 @@ function MerchantOverview({ m, isApproved, setView }: { m: MerchantUserProfile['
         </div>
       )}
       {isApproved && (
-        <div className="admin-metrics" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+        <div className="admin-metrics" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
           <div className="admin-metric" style={{ cursor: 'pointer' }} onClick={() => setView('scan')}>
             <span className="approved"><ShieldCheck size={19} /></span>
             <div><small>Scan &amp; log</small><strong style={{ fontSize: 13 }}>Verify residents</strong></div>
+          </div>
+          <div className="admin-metric" style={{ cursor: 'pointer', position: 'relative' }} onClick={() => setView('walkins')}>
+            <span className={pendingWalkIns > 0 ? 'pending' : 'approved'}><Bell size={19} /></span>
+            <div>
+              <small>Walk-ins</small>
+              <strong style={{ fontSize: 13 }}>
+                {pendingWalkIns > 0 ? `${pendingWalkIns} awaiting` : 'No pending'}
+              </strong>
+            </div>
+            {pendingWalkIns > 0 && (
+              <span style={{ position: 'absolute', top: 8, right: 8, width: 20, height: 20, borderRadius: '50%', background: '#dc2626', color: '#fff', fontSize: 10, fontWeight: 800, display: 'grid', placeItems: 'center' }}>
+                {pendingWalkIns}
+              </span>
+            )}
           </div>
           <div className="admin-metric" style={{ cursor: 'pointer' }} onClick={() => setView('transactions')}>
             <span className="pending"><RefreshCw size={19} /></span>
@@ -1219,10 +1288,149 @@ function MerchantOverview({ m, isApproved, setView }: { m: MerchantUserProfile['
             Use <strong>Scan &amp; log</strong> to verify a resident card and record a benefit transaction.
           </p>
           <p style={{ color: 'var(--muted)', fontSize: 12, margin: 0 }}>
-            Manage your benefit offers in the <strong>Offers</strong> tab. View history in <strong>Transactions</strong>. See summaries in <strong>Reports</strong>.
+            Check <strong>Walk-ins</strong> to see guests sent by the access point. Acknowledge them to generate their exit code.
           </p>
         </div>
       </div>
+    </section>
+  );
+}
+
+// ── Walk-ins panel ────────────────────────────────────────────────────
+function WalkInsPanel({ token, merchantId }: { token: string; merchantId: string }) {
+  const [walkIns, setWalkIns] = useState<WalkInLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [ackingId, setAckingId] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true); setError('');
+    try {
+      const { walkIns: items } = await getMerchantWalkIns(token, merchantId);
+      setWalkIns(items);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to load walk-ins. Check VITE_SECURITY_API_URL is set.');
+    } finally { setLoading(false); }
+  }, [token, merchantId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const acknowledge = async (id: string) => {
+    setAckingId(id);
+    try {
+      const { walkIn } = await acknowledgeWalkIn(token, id);
+      setWalkIns(old => old.map(w => w.id === id ? walkIn : w));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to acknowledge walk-in.');
+    } finally { setAckingId(''); }
+  };
+
+  const pending  = walkIns.filter(w => !w.acknowledged && !w.exitTime);
+  const active   = walkIns.filter(w =>  w.acknowledged && !w.exitTime);
+  const exited   = walkIns.filter(w =>  w.exitTime);
+
+  const fmt = (iso: string) => new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }).format(new Date(iso));
+
+  return (
+    <section style={{ marginTop: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div>
+          <h3 style={{ fontSize: 16, margin: 0 }}>Walk-in guests</h3>
+          <p style={{ color: 'var(--muted)', fontSize: 12, margin: '4px 0 0' }}>
+            Guests logged by the access point heading to your business. Acknowledge to generate their exit code.
+          </p>
+        </div>
+        <button className="secondary-button" style={{ fontSize: 12, minHeight: 34 }} onClick={load} disabled={loading}>
+          <RefreshCw size={14} /> Refresh
+        </button>
+      </div>
+
+      {error && <div className="auth-error" role="alert" style={{ marginBottom: 12 }}>{error}</div>}
+      {loading && <p style={{ color: 'var(--muted)', fontSize: 13 }}>Loading…</p>}
+
+      {/* Pending acknowledgement */}
+      {pending.length > 0 && (
+        <div className="admin-workspace" style={{ marginBottom: 16, border: '1px solid #fca5a5' }}>
+          <div className="admin-toolbar" style={{ background: '#fef2f2' }}>
+            <Bell size={15} style={{ color: '#dc2626' }} />
+            <strong style={{ fontSize: 13, color: '#dc2626' }}>Needs acknowledgement ({pending.length})</strong>
+          </div>
+          {pending.map(w => (
+            <div key={w.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, padding: '14px 16px', borderTop: '1px solid var(--line)', alignItems: 'center' }}>
+              <div>
+                <strong style={{ fontSize: 14 }}>{w.guestName}</strong>
+                {w.guestPhone && <span style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 8 }}>{w.guestPhone}</span>}
+                <p style={{ fontSize: 12, color: 'var(--muted)', margin: '3px 0 0' }}>
+                  Entered at {fmt(w.entryTime)} · Gate: {w.gate}
+                  {w.notes && <span> · {w.notes}</span>}
+                </p>
+              </div>
+              <button
+                className="primary-button"
+                style={{ fontSize: 12, minHeight: 36, whiteSpace: 'nowrap' }}
+                disabled={ackingId === w.id}
+                onClick={() => acknowledge(w.id)}
+              >
+                <CheckCircle2 size={15} />
+                {ackingId === w.id ? 'Processing…' : 'Acknowledge & generate exit code'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Acknowledged — inside, waiting to exit */}
+      {active.length > 0 && (
+        <div className="admin-workspace" style={{ marginBottom: 16 }}>
+          <div className="admin-toolbar">
+            <strong style={{ fontSize: 13 }}>Currently inside ({active.length})</strong>
+          </div>
+          {active.map(w => (
+            <div key={w.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, padding: '12px 16px', borderTop: '1px solid var(--line)', alignItems: 'center' }}>
+              <div>
+                <strong style={{ fontSize: 13 }}>{w.guestName}</strong>
+                {w.guestPhone && <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 6 }}>{w.guestPhone}</span>}
+                <p style={{ fontSize: 11, color: 'var(--muted)', margin: '3px 0 0' }}>
+                  Entered {fmt(w.entryTime)} · Acknowledged {w.acknowledgedAt ? fmt(w.acknowledgedAt) : ''}
+                </p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ fontSize: 11, color: 'var(--muted)', margin: '0 0 2px' }}>Exit code</p>
+                <strong style={{ fontFamily: 'monospace', fontSize: 22, letterSpacing: 3, color: '#1a5c3a' }}>
+                  {w.exitCode}
+                </strong>
+                <p style={{ fontSize: 10, color: 'var(--muted)', margin: '2px 0 0' }}>Give this code to the guest</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* No active walk-ins */}
+      {!loading && pending.length === 0 && active.length === 0 && (
+        <div className="admin-workspace" style={{ padding: '28px 20px', textAlign: 'center' }}>
+          <Bell size={28} style={{ color: 'var(--muted)', margin: '0 auto 10px', display: 'block' }} />
+          <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>No active walk-in guests right now.</p>
+          <p style={{ color: 'var(--muted)', fontSize: 12, margin: '6px 0 0' }}>When the access point logs a guest heading to your business, they will appear here.</p>
+        </div>
+      )}
+
+      {/* Exited today */}
+      {exited.length > 0 && (
+        <details style={{ marginTop: 8 }}>
+          <summary style={{ fontSize: 13, color: 'var(--muted)', cursor: 'pointer', padding: '6px 0' }}>
+            {exited.length} guest{exited.length !== 1 ? 's' : ''} already exited today
+          </summary>
+          <div className="admin-workspace" style={{ marginTop: 8 }}>
+            {exited.map(w => (
+              <div key={w.id} style={{ display: 'flex', gap: 12, padding: '10px 16px', borderTop: '1px solid var(--line)', fontSize: 12, color: 'var(--muted)', alignItems: 'center' }}>
+                <CheckCircle2 size={14} style={{ color: '#4e936d', flexShrink: 0 }} />
+                <span><strong style={{ color: 'var(--text)' }}>{w.guestName}</strong> · entered {fmt(w.entryTime)} · exited {w.exitTime ? fmt(w.exitTime) : ''}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
     </section>
   );
 }

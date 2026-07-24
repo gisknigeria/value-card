@@ -68,6 +68,12 @@ pilot delivered first.
 - Pending, suspended, and expired cards are denied.
 - End-to-end test proves: pending card denied, admin approval succeeds, same card
   allowed, and temporary test resident removed.
+- Access Point users now get a dedicated gate-focused experience with no map,
+  QR scan support, visitor-pass verification, automatic GPS sharing, camera
+  sharing, walk-in guest logging, merchant notification, and exit-code
+  verification.
+- Merchant users can now receive walk-in notifications from the security gate,
+  acknowledge them, and receive a generated exit code for the guest.
 
 ### Existing data model
 
@@ -219,6 +225,9 @@ The merchant platform is the largest missing product area.
 
 ## 8. SIGAR completion - P1
 
+- [x] Add a dedicated Access Point role experience with no map, scan workflows,
+  visitor verification, GPS sharing, camera sharing, and walk-in exit-code
+  handling.
 - [ ] Replace default SIGAR accounts with named security staff accounts.
 - [ ] Decide whether SIGAR authentication remains separate or uses the main User
   table. Document the decision and avoid conflicting account ownership.
