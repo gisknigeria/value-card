@@ -508,22 +508,27 @@ export class AuthService {
   async createVisitorPass(userId: string, label?: string) {
     const resident = await this.prisma.resident.findUnique({
       where: { userId },
-      include: { card: true },
     });
     if (!resident) throw new UnauthorizedException('Resident account is unavailable');
-    if (resident.card?.status !== 'ACTIVE') {
+
+    // Check card status separately to avoid any relation issues
+    const card = await this.prisma.card.findUnique({
+      where: { residentId: resident.id },
+      select: { status: true },
+    });
+    if (card?.status !== 'ACTIVE') {
       throw new BadRequestException('Visitor passes can only be created when your card is active');
     }
 
     // Count active (non-expired, non-used) passes — max 5
-    const [{ count }] = await this.prisma.$queryRaw<[{ count: bigint }]>`
+    const activeCountResult = await this.prisma.$queryRaw<[{ count: bigint }]>`
       SELECT COUNT(*)::bigint as count
       FROM visitor_passes
       WHERE "residentId" = ${resident.id}
         AND "usedAt" IS NULL
         AND "expiresAt" > NOW()
     `;
-    if (Number(count) >= 5) {
+    if (Number(activeCountResult[0].count) >= 5) {
       throw new BadRequestException('Maximum of 5 active visitor passes reached');
     }
 
@@ -537,17 +542,20 @@ export class AuthService {
       VALUES (${id}, ${resident.id}, ${code}, ${labelVal}, ${expiresAt}, NOW())
     `;
 
-    const [pass] = await this.prisma.$queryRaw<Array<{
+    const rows = await this.prisma.$queryRaw<Array<{
       id: string; code: string; label: string | null;
       usedAt: Date | null; expiresAt: Date; createdAt: Date;
     }>>`
       SELECT id, code, label, "usedAt", "expiresAt", "createdAt"
       FROM visitor_passes WHERE id = ${id}
     `;
+    const pass = rows[0];
 
     return {
       pass: {
-        ...pass,
+        id:        pass.id,
+        code:      pass.code,
+        label:     pass.label,
         usedAt:    null,
         expiresAt: new Date(pass.expiresAt).toISOString(),
         createdAt: new Date(pass.createdAt).toISOString(),
