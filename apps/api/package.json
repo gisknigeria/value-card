@@ -10,8 +10,7 @@
     "test:auth-flow": "tsx test/auth-flow.e2e.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:resolve": "prisma migrate resolve --applied 20260724000001_visitor_passes",
-    "prisma:deploy": "prisma migrate deploy",
+    "prisma:deploy": "prisma migrate resolve --applied 20260724000001_visitor_passes && prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
