@@ -1,4 +1,4 @@
-import { AdminRole, BenefitType, OfferStatus, PrismaClient, RedemptionModel, UserRole } from '@prisma/client';
+import { AdminRole, BenefitType, MerchantUserRole, OfferStatus, PrismaClient, RedemptionModel, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -9,6 +9,7 @@ const merchants = [
     category: 'Supermarkets',
     contactPerson: 'Tola Adebayo',
     phone: '08030000001',
+    email: 'fresh@bodija.example.com',
     location: 'Old Bodija',
     offer: {
       title: 'Resident grocery discount',
@@ -24,6 +25,7 @@ const merchants = [
     category: 'Pharmacies',
     contactPerson: 'Morenike James',
     phone: '08030000002',
+    email: 'cedar@bodija.example.com',
     location: 'Awolowo Avenue',
     offer: {
       title: 'Pharmacy reward credit',
@@ -39,6 +41,7 @@ const merchants = [
     category: 'Restaurants',
     contactPerson: 'Femi Cole',
     phone: '08030000003',
+    email: 'kitchen@bodija.example.com',
     location: 'Aare Avenue',
     offer: {
       title: 'Resident dining benefit',
@@ -55,6 +58,7 @@ async function seed() {
   const issuedAt = new Date('2026-06-18T00:00:00.000Z');
   const expiresAt = new Date('2027-06-18T23:59:59.999Z');
   const adminPassword = process.env.ADMIN_INITIAL_PASSWORD || 'BodijaAdmin@2026';
+  const merchantPassword = bcrypt.hashSync('merchant123', 10);
 
   await prisma.user.upsert({
     where: { email: 'gisknigeria@gmail.com' },
@@ -102,24 +106,57 @@ async function seed() {
   });
 
   for (const item of merchants) {
-    const { offer, ...merchant } = item;
-    const existing = await prisma.merchant.findUnique({
-      where: { businessName: merchant.businessName },
+    const { offer, ...merchantData } = item;
+
+    // Upsert merchant business record
+    const created = await prisma.merchant.upsert({
+      where: { businessName: merchantData.businessName },
+      update: {},
+      create: { ...merchantData, approvalStatus: 'APPROVED' },
     });
 
-    if (existing) continue;
-
-    const created = await prisma.merchant.create({
-      data: { ...merchant, approvalStatus: 'APPROVED' },
-    });
-    await prisma.offer.create({
-      data: {
-        ...offer,
-        merchantId: created.id,
-        validFrom: new Date(),
-        status: OfferStatus.ACTIVE,
+    // Upsert the owner user account so merchants can log in
+    // Try by phone first, then by email in case phone changed
+    const ownerUser = await prisma.user.upsert({
+      where: { phone: merchantData.phone },
+      update: {
+        // Ensure the role and active status are correct
+        role: UserRole.MERCHANT,
+        isActive: true,
+      },
+      create: {
+        phone: merchantData.phone,
+        email: merchantData.email,
+        passwordHash: merchantPassword,
+        role: UserRole.MERCHANT,
+        isActive: true,
       },
     });
+
+    // Link user → merchant if not already linked
+    await prisma.merchantUser.upsert({
+      where: { userId: ownerUser.id },
+      update: {},
+      create: {
+        userId: ownerUser.id,
+        merchantId: created.id,
+        role: MerchantUserRole.OWNER,
+        isActive: true,
+      },
+    });
+
+    // Create offer if merchant was just created (no offers yet)
+    const offerCount = await prisma.offer.count({ where: { merchantId: created.id } });
+    if (offerCount === 0) {
+      await prisma.offer.create({
+        data: {
+          ...offer,
+          merchantId: created.id,
+          validFrom: new Date(),
+          status: OfferStatus.ACTIVE,
+        },
+      });
+    }
   }
 }
 
