@@ -13,10 +13,78 @@ import {
   MdVerifiedUser,
   MdWarning,
   MdWifiOff,
+  MdImage,
+  MdKeyboard,
+  MdStopCircle,
 } from "react-icons/md";
 
 const API = "/api";
-const SCAN_COOLDOWN_MS = 3000; // 3-second cooldown between scans of the same token
+const SCAN_COOLDOWN_MS = 3000;
+
+// ── QR decode helpers ────────────────────────────────────────────────────────
+
+/**
+ * Decode a QR code from an ImageData / HTMLVideoElement / HTMLImageElement
+ * using jsQR (canvas-based, works in every browser) with BarcodeDetector as a
+ * fast-path when available.
+ */
+async function decodeQR(source) {
+  // Fast path: native BarcodeDetector (Chrome Android / newer desktop Chrome)
+  if ("BarcodeDetector" in window) {
+    try {
+      const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+      const codes = await detector.detect(source);
+      if (codes[0]?.rawValue) return codes[0].rawValue;
+    } catch {
+      // fall through to jsQR
+    }
+  }
+
+  // Universal path: draw frame to canvas and run jsQR
+  try {
+    const jsQR = (await import("jsqr")).default;
+    const canvas = document.createElement("canvas");
+    let w, h;
+    if (source instanceof HTMLVideoElement) {
+      w = source.videoWidth;
+      h = source.videoHeight;
+    } else if (source instanceof HTMLImageElement) {
+      w = source.naturalWidth;
+      h = source.naturalHeight;
+    } else {
+      return null;
+    }
+    if (!w || !h) return null;
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(source, 0, 0, w, h);
+    const imageData = ctx.getImageData(0, 0, w, h);
+    const result = jsQR(imageData.data, imageData.width, imageData.height);
+    return result?.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Decode a QR code from a File (photo upload).
+ */
+async function decodeQRFromFile(file) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = async () => {
+      const value = await decodeQR(img);
+      URL.revokeObjectURL(url);
+      resolve(value);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
 
 export default function AccessScanner({ session, onClose }) {
   const [token,     setToken]     = useState("");
@@ -29,20 +97,32 @@ export default function AccessScanner({ session, onClose }) {
   const [evtPage,   setEvtPage]   = useState(0);
   const [busy,      setBusy]      = useState(false);
   const [isOnline,  setIsOnline]  = useState(navigator.onLine);
-  const [cameraOpen,   setCameraOpen]   = useState(false);
-  const [cameraError,  setCameraError]  = useState("");
-  const [cameraSupported, setCameraSupported] = useState(true);
-  const [showFilters,  setShowFilters]  = useState(false);
-  const [filterGate,   setFilterGate]   = useState("");
+
+  // Camera state
+  const [cameraOpen,    setCameraOpen]    = useState(false);
+  const [cameraError,   setCameraError]   = useState("");
+  const [cameraStarting, setCameraStarting] = useState(false);
+
+  // Photo-upload state
+  const [photoLoading,  setPhotoLoading]  = useState(false);
+  const [photoError,    setPhotoError]    = useState("");
+
+  // Input mode: "camera" | "photo" | "manual"
+  const [inputMode, setInputMode] = useState("camera");
+
+  // Filters / pagination
+  const [showFilters,    setShowFilters]    = useState(false);
+  const [filterGate,     setFilterGate]     = useState("");
   const [filterDecision, setFilterDecision] = useState("");
 
   // Override mode (admin-only)
   const [overrideMode,   setOverrideMode]   = useState(false);
   const [overrideReason, setOverrideReason] = useState("");
 
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
-  const timerRef = useRef(null);
+  const videoRef      = useRef(null);
+  const streamRef     = useRef(null);
+  const timerRef      = useRef(null);
+  const photoInputRef = useRef(null);
   const lastScannedRef = useRef({ token: "", at: 0 });
 
   const isAdmin = ["Admin", "Super Admin"].includes(session?.user?.role);
@@ -53,25 +133,16 @@ export default function AccessScanner({ session, onClose }) {
     "Content-Type": "application/json",
   };
 
-  // Online/offline detection
+  // ── Online/offline ─────────────────────────────────────────────────────────
   useEffect(() => {
-    const onOnline  = () => setIsOnline(true);
-    const onOffline = () => setIsOnline(false);
-    window.addEventListener("online",  onOnline);
-    window.addEventListener("offline", onOffline);
-    return () => {
-      window.removeEventListener("online",  onOnline);
-      window.removeEventListener("offline", onOffline);
-    };
+    const on  = () => setIsOnline(true);
+    const off = () => setIsOnline(false);
+    window.addEventListener("online",  on);
+    window.addEventListener("offline", off);
+    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, []);
 
-  // BarcodeDetector capability check
-  useEffect(() => {
-    if (!("BarcodeDetector" in window)) {
-      setCameraSupported(false);
-    }
-  }, []);
-
+  // ── Event history ──────────────────────────────────────────────────────────
   const loadEvents = useCallback(async (page = 0) => {
     try {
       const params = new URLSearchParams({
@@ -86,13 +157,12 @@ export default function AccessScanner({ session, onClose }) {
       setEvents(data.events ?? data);
       setTotal(data.total ?? 0);
       setEvtPage(page);
-    } catch {
-      // History refresh failure is non-critical
-    }
+    } catch { /* non-critical */ }
   }, [session.token, filterGate, filterDecision]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadEvents(0); }, [loadEvents]);
 
+  // ── Camera lifecycle ───────────────────────────────────────────────────────
   const stopCamera = useCallback(() => {
     if (timerRef.current) window.clearInterval(timerRef.current);
     timerRef.current = null;
@@ -101,31 +171,103 @@ export default function AccessScanner({ session, onClose }) {
     setCameraOpen(false);
   }, []);
 
-  useEffect(() => stopCamera, [stopCamera]);
+  // Cleanup on unmount or when switching away from camera mode
+  useEffect(() => {
+    if (inputMode !== "camera") stopCamera();
+  }, [inputMode, stopCamera]);
 
+  useEffect(() => () => stopCamera(), [stopCamera]);
+
+  const startCamera = useCallback(async () => {
+    setCameraError("");
+    setCameraStarting(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      setCameraOpen(true);
+      // Attach stream to video element once it's in the DOM
+      window.setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+      }, 50);
+
+      // Scan loop — uses jsQR canvas fallback so it works in all browsers
+      timerRef.current = window.setInterval(async () => {
+        const video = videoRef.current;
+        if (!video || video.readyState < 2) return;
+        const value = await decodeQR(video);
+        if (value) {
+          stopCamera();
+          setToken(value);
+          verify(value);
+        }
+      }, 500);
+    } catch (error) {
+      const msg =
+        error.name === "NotAllowedError"
+          ? "Camera permission denied. Allow camera access in your browser settings and try again."
+          : error.name === "NotFoundError"
+            ? "No camera found on this device. Use the photo upload option instead."
+            : `Unable to start camera: ${error.message || error.name}. Try uploading a photo instead.`;
+      setCameraError(msg);
+    } finally {
+      setCameraStarting(false);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-start camera when modal opens in camera mode
+  useEffect(() => {
+    if (inputMode === "camera" && !cameraOpen && !cameraStarting) {
+      startCamera();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Photo upload scan ──────────────────────────────────────────────────────
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoError("");
+    setPhotoLoading(true);
+    try {
+      const value = await decodeQRFromFile(file);
+      if (value) {
+        setToken(value);
+        verify(value);
+      } else {
+        setPhotoError("No QR code found in this image. Make sure the QR code is clear and well-lit, then try again.");
+      }
+    } finally {
+      setPhotoLoading(false);
+      // Reset file input so the same file can be re-selected
+      if (photoInputRef.current) photoInputRef.current.value = "";
+    }
+  };
+
+  // ── Verify ─────────────────────────────────────────────────────────────────
   const verify = async (scannedValue = token) => {
     const value = String(scannedValue || "").trim();
     if (!value || busy) return;
 
-    // Offline safety: never allow access when offline
     if (!isOnline) {
       setResult({
         decision: "DENIED",
-        reason:   "Device is offline. Verification is unavailable — do not allow entry.",
+        reason:   "Device is offline — verification unavailable. Do not allow entry.",
         offline:  true,
         member:   null,
       });
       return;
     }
 
-    // Cooldown: prevent repeated accidental scans of the same token
     const now = Date.now();
     if (
       lastScannedRef.current.token === value &&
       now - lastScannedRef.current.at < SCAN_COOLDOWN_MS
-    ) {
-      return; // silently skip duplicate within cooldown window
-    }
+    ) return;
     lastScannedRef.current = { token: value, at: now };
 
     if (overrideMode && !overrideReason.trim()) {
@@ -135,8 +277,6 @@ export default function AccessScanner({ session, onClose }) {
 
     setBusy(true);
     setResult(null);
-
-    // Idempotency key: unique per scan attempt to prevent duplicate DB writes
     const idempotencyKey = `sigar-${value}-${Date.now()}`;
 
     try {
@@ -147,14 +287,13 @@ export default function AccessScanner({ session, onClose }) {
           token: value,
           direction,
           gate,
-          scanNote:        scanNote.trim() || undefined,
+          scanNote:       scanNote.trim() || undefined,
           idempotencyKey,
-          isOverride:      overrideMode || undefined,
-          overrideReason:  overrideMode ? overrideReason.trim() : undefined,
+          isOverride:     overrideMode || undefined,
+          overrideReason: overrideMode ? overrideReason.trim() : undefined,
         }),
       });
 
-      // Offline or server error — never assume allowed
       if (!response.ok && response.status >= 500) {
         setResult({ decision: "DENIED", reason: "Verification service error — do not allow entry.", member: null });
         return;
@@ -172,66 +311,22 @@ export default function AccessScanner({ session, onClose }) {
       setOverrideMode(false);
       await loadEvents(0);
     } catch {
-      // Network error — fail closed
       setResult({ decision: "DENIED", reason: "Network error — do not allow entry.", member: null });
     } finally {
       setBusy(false);
     }
   };
 
-  const startCamera = async () => {
-    setCameraError("");
-
-    if (!cameraSupported) {
-      setCameraError(
-        "QR camera scanning is not supported on this browser. " +
-        "Try Chrome on Android or Safari on iOS, or enter the membership ID manually."
-      );
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false,
-      });
-      streamRef.current = stream;
-      setCameraOpen(true);
-      window.setTimeout(() => {
-        if (videoRef.current) videoRef.current.srcObject = stream;
-      }, 0);
-
-      const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
-      timerRef.current = window.setInterval(async () => {
-        if (!videoRef.current || videoRef.current.readyState < 2) return;
-        const codes = await detector.detect(videoRef.current).catch(() => []);
-        const value = codes[0]?.rawValue;
-        if (value) {
-          stopCamera();
-          setToken(value);
-          verify(value);
-        }
-      }, 650);
-    } catch (error) {
-      setCameraError(
-        error.name === "NotAllowedError"
-          ? "Camera permission was denied. Allow camera access in your browser settings."
-          : error.name === "NotFoundError"
-            ? "No camera found on this device."
-            : "Unable to start the camera. Enter the membership ID manually."
-      );
-    }
-  };
-
   const decisionClass = (d = "") => {
     if (d === "ALLOWED" || d === "OVERRIDE_ALLOWED") return "allowed";
-    if (d === "DENIED" || d === "ERROR") return "denied";
     return "denied";
   };
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="access-modal-backdrop">
       <section className="access-modal" aria-label="Gate access scanner">
+
         {/* Offline banner */}
         {!isOnline && (
           <div className="access-offline-banner" role="alert" aria-live="assertive">
@@ -242,8 +337,8 @@ export default function AccessScanner({ session, onClose }) {
         <header className="access-head">
           <div>
             <span className="eyebrow">BODIJA GATE VERIFICATION</span>
-            <h2><MdQrCodeScanner /> Scan resident ID</h2>
-            <p>Verify a Value Card and record entry or exit.</p>
+            <h2><MdQrCodeScanner /> Scan resident card</h2>
+            <p>Point camera at the QR code, upload a photo, or type the membership ID.</p>
           </div>
           <button className="access-close" onClick={onClose} aria-label="Close">
             <MdClose />
@@ -252,7 +347,150 @@ export default function AccessScanner({ session, onClose }) {
 
         <div className="access-body">
           <div className="access-workspace">
-            {/* Direction toggle */}
+
+            {/* ── Input mode tabs ─────────────────────────────────────── */}
+            <div className="access-mode-tabs">
+              <button
+                className={inputMode === "camera" ? "active" : ""}
+                onClick={() => {
+                  setInputMode("camera");
+                  setCameraError("");
+                  if (!cameraOpen) startCamera();
+                }}
+              >
+                <MdCameraAlt /> Live camera
+              </button>
+              <button
+                className={inputMode === "photo" ? "active" : ""}
+                onClick={() => { setInputMode("photo"); setPhotoError(""); }}
+              >
+                <MdImage /> Upload photo
+              </button>
+              <button
+                className={inputMode === "manual" ? "active" : ""}
+                onClick={() => setInputMode("manual")}
+              >
+                <MdKeyboard /> Manual entry
+              </button>
+            </div>
+
+            {/* ── CAMERA MODE ─────────────────────────────────────────── */}
+            {inputMode === "camera" && (
+              <div className="access-scan-primary">
+                {/* Camera viewfinder — always rendered when in camera mode */}
+                <div className="access-video-wrap">
+                  {cameraOpen ? (
+                    <>
+                      <video ref={videoRef} autoPlay playsInline muted />
+                      <div className="access-scan-frame" />
+                      <div className="access-scan-hint">Align QR code within the frame</div>
+                    </>
+                  ) : (
+                    <div className="access-camera-placeholder">
+                      {cameraStarting ? (
+                        <div className="access-camera-loading">
+                          <div className="access-spinner" />
+                          <span>Starting camera…</span>
+                        </div>
+                      ) : (
+                        <div className="access-camera-loading">
+                          <MdCameraAlt size={42} style={{ color: "#c6974c", opacity: 0.7 }} />
+                          <span>{cameraError ? "Camera unavailable" : "Camera stopped"}</span>
+                          <button className="access-restart-cam" onClick={startCamera}>
+                            Restart camera
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {cameraError && (
+                  <div className="access-camera-error">{cameraError}</div>
+                )}
+
+                {/* Camera controls */}
+                <div className="access-scan-controls">
+                  {cameraOpen ? (
+                    <button className="access-stop-btn" onClick={stopCamera}>
+                      <MdStopCircle /> Stop camera
+                    </button>
+                  ) : (
+                    !cameraStarting && (
+                      <button className="access-primary" onClick={startCamera} disabled={!isOnline}>
+                        <MdCameraAlt /> Start camera scan
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── PHOTO UPLOAD MODE ────────────────────────────────────── */}
+            {inputMode === "photo" && (
+              <div className="access-photo-zone">
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  id="photo-upload"
+                  style={{ display: "none" }}
+                  onChange={handlePhotoUpload}
+                />
+                <label htmlFor="photo-upload" className={`access-photo-drop${photoLoading ? " loading" : ""}`}>
+                  {photoLoading ? (
+                    <>
+                      <div className="access-spinner" />
+                      <span>Reading QR code…</span>
+                    </>
+                  ) : (
+                    <>
+                      <MdImage size={48} style={{ color: "#c6974c" }} />
+                      <strong>Tap to take a photo or choose from gallery</strong>
+                      <span>Point your camera at the QR code and take a clear, well-lit photo.</span>
+                    </>
+                  )}
+                </label>
+                {photoError && (
+                  <div className="access-camera-error">{photoError}</div>
+                )}
+              </div>
+            )}
+
+            {/* ── MANUAL ENTRY MODE ────────────────────────────────────── */}
+            {inputMode === "manual" && (
+              <label className="access-field" style={{ marginTop: 8 }}>
+                Membership ID or QR value
+                <div className="access-token">
+                  <MdBadge />
+                  <input
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    placeholder="BVC-26-01842"
+                    autoComplete="off"
+                    autoFocus
+                    onKeyDown={(e) => { if (e.key === "Enter") verify(); }}
+                  />
+                </div>
+              </label>
+            )}
+
+            {/* ── Scanned value preview (all modes) ────────────────────── */}
+            {token && inputMode !== "manual" && (
+              <div className="access-scanned-preview">
+                <MdBadge style={{ color: "#c6974c" }} />
+                <span>Scanned: <strong>{token}</strong></span>
+                <button onClick={() => setToken("")} title="Clear">
+                  <MdClose size={14} />
+                </button>
+              </div>
+            )}
+
+            {/* ── Divider ───────────────────────────────────────────────── */}
+            <div className="access-section-divider" />
+
+            {/* ── Direction toggle ──────────────────────────────────────── */}
             <div className="access-direction" aria-label="Access direction">
               <button className={direction === "ENTRY" ? "active" : ""} onClick={() => setDirection("ENTRY")}>
                 <MdLogin /> Entry
@@ -262,7 +500,7 @@ export default function AccessScanner({ session, onClose }) {
               </button>
             </div>
 
-            {/* Gate selector */}
+            {/* ── Gate selector ─────────────────────────────────────────── */}
             <label className="access-field">
               Gate
               <select value={gate} onChange={(e) => setGate(e.target.value)}>
@@ -273,22 +511,7 @@ export default function AccessScanner({ session, onClose }) {
               </select>
             </label>
 
-            {/* Token input */}
-            <label className="access-field">
-              QR value or membership ID
-              <div className="access-token">
-                <MdBadge />
-                <input
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  placeholder="BVC-26-01842"
-                  autoComplete="off"
-                  onKeyDown={(e) => { if (e.key === "Enter") verify(); }}
-                />
-              </div>
-            </label>
-
-            {/* Optional scan note */}
+            {/* ── Optional scan note ────────────────────────────────────── */}
             <label className="access-field">
               Scan note <span style={{ fontWeight: 400, color: "#9ca3af" }}>(optional)</span>
               <div className="access-token">
@@ -302,7 +525,7 @@ export default function AccessScanner({ session, onClose }) {
               </div>
             </label>
 
-            {/* Override mode — admin only */}
+            {/* ── Override mode (admin only) ────────────────────────────── */}
             {isAdmin && (
               <label className="access-field access-override-row">
                 <input
@@ -331,44 +554,20 @@ export default function AccessScanner({ session, onClose }) {
               </label>
             )}
 
-            {/* Action buttons */}
-            <div className="access-actions">
+            {/* ── Verify button ─────────────────────────────────────────── */}
+            <div className="access-actions" style={{ marginTop: 14 }}>
               <button
                 className={`access-primary${overrideMode ? " override" : ""}`}
                 onClick={() => verify()}
-                disabled={busy || !isOnline}
+                disabled={busy || !isOnline || !token}
+                style={{ gridColumn: "1 / -1" }}
               >
                 <MdVerifiedUser />
                 {busy ? "Checking…" : overrideMode ? "Override verify" : `Verify ${direction === "ENTRY" ? "entry" : "exit"}`}
               </button>
-              <button
-                className="access-camera"
-                onClick={cameraOpen ? stopCamera : startCamera}
-                disabled={!cameraSupported || !isOnline}
-              >
-                <MdCameraAlt />
-                {cameraOpen ? "Stop camera" : cameraSupported ? "Scan with camera" : "Camera unavailable"}
-              </button>
             </div>
 
-            {/* Camera fallback message */}
-            {!cameraSupported && (
-              <div className="access-camera-error">
-                QR camera scanning requires Chrome (Android) or Safari (iOS) with a rear camera.
-                Enter the membership ID manually above.
-              </div>
-            )}
-            {cameraError && <div className="access-camera-error">{cameraError}</div>}
-
-            {/* Camera view */}
-            {cameraOpen && (
-              <div className="access-video-wrap">
-                <video ref={videoRef} autoPlay playsInline muted />
-                <div className="access-scan-frame" />
-              </div>
-            )}
-
-            {/* Verification result */}
+            {/* ── Verification result ───────────────────────────────────── */}
             {result && (
               <article className={`access-result ${decisionClass(result.decision)}`} role="alert" aria-live="polite">
                 <div className="access-result-status">
@@ -393,7 +592,7 @@ export default function AccessScanner({ session, onClose }) {
             )}
           </div>
 
-          {/* Event history panel */}
+          {/* ── Event history panel ───────────────────────────────────────── */}
           <aside className="access-history">
             <div className="access-history-title">
               <MdHistory />
@@ -411,7 +610,6 @@ export default function AccessScanner({ session, onClose }) {
               </button>
             </div>
 
-            {/* Filters */}
             {showFilters && (
               <div className="access-filters">
                 <select value={filterGate} onChange={(e) => setFilterGate(e.target.value)}>
@@ -454,7 +652,6 @@ export default function AccessScanner({ session, onClose }) {
               )}
             </div>
 
-            {/* Pagination */}
             {total > PAGE_SIZE && (
               <div className="access-pagination">
                 <button disabled={evtPage === 0} onClick={() => loadEvents(evtPage - 1)}>← Previous</button>
