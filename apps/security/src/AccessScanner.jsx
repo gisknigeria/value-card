@@ -276,7 +276,7 @@ export default function AccessScanner({ session, onClose }) {
               <button className={inputMode === "manual"  ? "active" : ""} onClick={() => setInputMode("manual")}>
                 <MdKeyboard /> Manual entry
               </button>
-              <button className={inputMode === "visitor" ? "active" : ""} onClick={() => { setInputMode("visitor"); setVisitorResult(null); }}>
+              <button className={inputMode === "visitor" ? "visitor-tab active" : "visitor-tab"} onClick={() => { setInputMode("visitor"); setVisitorResult(null); }}>
                 <MdConfirmationNumber /> Visitor code
               </button>
             </div>

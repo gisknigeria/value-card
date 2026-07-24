@@ -178,7 +178,7 @@
   border-radius: 5px;
   background: #18240f;
   color: #8a9e7c;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s, color 0.15s;
@@ -193,6 +193,19 @@
 .access-mode-tabs button:hover:not(.active) {
   background: #1e2e14;
   color: #b0c4a0;
+}
+
+/* Visitor code tab — distinct amber highlight so security can find it instantly */
+.access-mode-tabs button.visitor-tab {
+  border-color: #7a5520;
+  background: #1e1608;
+  color: #c6974c;
+}
+
+.access-mode-tabs button.visitor-tab.active {
+  border-color: #e4c882;
+  background: #3a2a10;
+  color: #f5d680;
 }
 
 /* ── Camera / scan primary block ─────────────────────────────────────── */

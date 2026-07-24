@@ -4121,8 +4121,6 @@ function Dashboard({ session, onLogout }) {
     setDrawMode("");
     setNotice("Incident submitted successfully");
     setTimeout(() => setNotice(""), 2500);
-  };
-  const updateStatus = async (status) => {
     const item = await request(`/incidents/${selected.id}`, session.token, {
       method: "PUT",
       body: JSON.stringify({ status }),
@@ -4144,8 +4142,6 @@ function Dashboard({ session, onLogout }) {
     setSelected(null);
     setNotice("Incident deleted");
     setTimeout(() => setNotice(""), 2500);
-  };
-  const toggleReportOnMap = (report) =>
     setHiddenReportIds((old) => {
       const next = old.includes(report.id)
         ? old.filter((id) => id !== report.id)
@@ -5198,7 +5194,7 @@ function Dashboard({ session, onLogout }) {
     setCameras((old) =>
       old.some((x) => x.id === camera.id) ? old : [...old, camera],
     );
-    setNotice("Camera feed registered");
+    
   };
   const deleteCamera = async (camera) => {
     if (!window.confirm(`Delete camera "${camera.name}"?`)) return;
@@ -6215,6 +6211,8 @@ function Dashboard({ session, onLogout }) {
           onDeleteRoom={deleteChatRoom}
         />
       )}
+      {/* Toast — only shown for errors and emergency alerts */}
+      {notice && <div className="toast">{notice}</div>}
     </main>
   );
 }
