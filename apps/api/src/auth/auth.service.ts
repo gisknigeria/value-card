@@ -485,12 +485,24 @@ export class AuthService {
     const resident = await this.prisma.resident.findUnique({ where: { userId } });
     if (!resident) throw new UnauthorizedException('Resident account is unavailable');
 
-    const passes = await this.prisma.visitorPass.findMany({
-      where: { residentId: resident.id },
-      orderBy: { createdAt: 'desc' },
-    });
+    const passes = await this.prisma.$queryRaw<Array<{
+      id: string; code: string; label: string | null;
+      usedAt: Date | null; expiresAt: Date; createdAt: Date;
+    }>>`
+      SELECT id, code, label, "usedAt", "expiresAt", "createdAt"
+      FROM visitor_passes
+      WHERE "residentId" = ${resident.id}
+      ORDER BY "createdAt" DESC
+    `;
 
-    return { passes };
+    return {
+      passes: passes.map(p => ({
+        ...p,
+        usedAt:    p.usedAt    ? new Date(p.usedAt).toISOString()    : null,
+        expiresAt: new Date(p.expiresAt).toISOString(),
+        createdAt: new Date(p.createdAt).toISOString(),
+      })),
+    };
   }
 
   async createVisitorPass(userId: string, label?: string) {
@@ -504,51 +516,67 @@ export class AuthService {
     }
 
     // Count active (non-expired, non-used) passes — max 5
-    const activeCount = await this.prisma.visitorPass.count({
-      where: {
-        residentId: resident.id,
-        usedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-    });
-    if (activeCount >= 5) {
+    const [{ count }] = await this.prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(*)::bigint as count
+      FROM visitor_passes
+      WHERE "residentId" = ${resident.id}
+        AND "usedAt" IS NULL
+        AND "expiresAt" > NOW()
+    `;
+    if (Number(count) >= 5) {
       throw new BadRequestException('Maximum of 5 active visitor passes reached');
     }
 
-    const code = await this.generateVisitorCode();
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    const code      = await this.generateVisitorCode();
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const id        = `vp-${randomBytes(10).toString('base64url')}`;
+    const labelVal  = label?.trim() || null;
 
-    const pass = await this.prisma.visitorPass.create({
-      data: {
-        residentId: resident.id,
-        code,
-        label: label?.trim() || null,
-        expiresAt,
+    await this.prisma.$executeRaw`
+      INSERT INTO visitor_passes (id, "residentId", code, label, "expiresAt", "createdAt")
+      VALUES (${id}, ${resident.id}, ${code}, ${labelVal}, ${expiresAt}, NOW())
+    `;
+
+    const [pass] = await this.prisma.$queryRaw<Array<{
+      id: string; code: string; label: string | null;
+      usedAt: Date | null; expiresAt: Date; createdAt: Date;
+    }>>`
+      SELECT id, code, label, "usedAt", "expiresAt", "createdAt"
+      FROM visitor_passes WHERE id = ${id}
+    `;
+
+    return {
+      pass: {
+        ...pass,
+        usedAt:    null,
+        expiresAt: new Date(pass.expiresAt).toISOString(),
+        createdAt: new Date(pass.createdAt).toISOString(),
       },
-    });
-
-    return { pass };
+    };
   }
 
   async deleteVisitorPass(userId: string, id: string) {
     const resident = await this.prisma.resident.findUnique({ where: { userId } });
     if (!resident) throw new UnauthorizedException('Resident account is unavailable');
 
-    await this.prisma.visitorPass.deleteMany({
-      where: { id, residentId: resident.id },
-    });
+    await this.prisma.$executeRaw`
+      DELETE FROM visitor_passes
+      WHERE id = ${id} AND "residentId" = ${resident.id}
+    `;
     return { success: true };
   }
 
   private async generateVisitorCode(): Promise<string> {
-    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I, O to avoid confusion
+    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
     const digits  = '0123456789';
     for (let attempt = 0; attempt < 20; attempt++) {
       const alpha = Array.from({ length: 3 }, () => letters[randomInt(0, letters.length)]).join('');
       const num   = Array.from({ length: 3 }, () => digits[randomInt(0, digits.length)]).join('');
       const code  = `${alpha}${num}`;
-      const exists = await this.prisma.visitorPass.findUnique({ where: { code } });
-      if (!exists) return code;
+      const [{ count }] = await this.prisma.$queryRaw<[{ count: bigint }]>`
+        SELECT COUNT(*)::bigint as count FROM visitor_passes WHERE code = ${code}
+      `;
+      if (Number(count) === 0) return code;
     }
     return `VP${randomBytes(3).toString('hex').toUpperCase()}`;
   }
