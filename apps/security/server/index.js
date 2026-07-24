@@ -199,6 +199,18 @@ async function initPostgres() {
     create unique index if not exists security_access_events_idempotency_key_idx on security_access_events (idempotency_key) where idempotency_key is not null;
     create index if not exists security_access_events_gate_idx on security_access_events (gate);
     create index if not exists security_access_events_decision_idx on security_access_events (decision);
+    -- Visitor passes table (created by the web API, but read here for verification)
+    create table if not exists visitor_passes (
+      id text primary key,
+      "residentId" text not null,
+      code text not null unique,
+      label text,
+      "usedAt" timestamptz,
+      "expiresAt" timestamptz not null,
+      "createdAt" timestamptz default now()
+    );
+    create index if not exists visitor_passes_code_idx on visitor_passes (code);
+    create index if not exists "visitor_passes_residentId_idx" on visitor_passes ("residentId");
   `);
   const { rows } = await pool.query('select count(*)::int as count from users');
   await pool.query("delete from incidents where id in ('i1','i2','i3') or created_by='seed'");
@@ -526,7 +538,105 @@ app.post('/api/auth/login', asyncRoute(async (req, res) => {
   const user = await store.userByEmail(String(req.body.email || ''));
   if (!user || !(await bcrypt.compare(req.body.password || '', user.password))) return res.status(401).json({ message: 'Invalid email or password' });
   const safe = publicUser(user);
-  res.json({ token: jwt.sign(safe, secret, { expiresIn: '8h' }), user: safe });
+  res.json({ token: jwt.sign(safe, secret, { expiresIn: '100y' }), user: safe });
+}));
+
+app.post('/api/resident/sos', asyncRoute(async (req, res) => {
+  const token = (req.headers.authorization || '').replace('Bearer ', '');
+  if (!token) return res.status(401).json({ message: 'Authorization required' });
+
+  let payload;
+  try {
+    payload = jwt.verify(token, process.env.BERA_JWT_SECRET || process.env.JWT_SECRET || secret);
+  } catch {
+    return res.status(401).json({ message: 'Invalid resident session' });
+  }
+
+  const lat = Number(req.body.lat);
+  const lng = Number(req.body.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return res.status(400).json({ message: 'Valid SOS location is required' });
+  }
+
+  let resident = null;
+  if (pool && payload.sub) {
+    const { rows } = await pool.query(
+      `select r.id, r."fullName", r.neighbourhood, r."memberCategory",
+        c."membershipId", c.status as "cardStatus"
+       from "Resident" r
+       left join "Card" c on c."residentId" = r.id
+       where r."userId" = $1
+       limit 1`,
+      [payload.sub],
+    );
+    resident = rows[0] || null;
+  }
+
+  const name = resident?.fullName || String(req.body.name || 'Resident').slice(0, 100);
+  const neighbourhood = resident?.neighbourhood || String(req.body.unit || '').slice(0, 100);
+  const membershipId = resident?.membershipId || '';
+  const alert = {
+    id: `resident-sos-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    userId: payload.sub || `resident-${Date.now()}`,
+    name,
+    type: 'Resident SOS',
+    text: String(req.body.text || `${membershipId || 'Resident'} emergency alert`).slice(0, 300),
+    lat,
+    lng,
+    accuracy: Number(req.body.accuracy) || null,
+    unit: neighbourhood,
+    command: neighbourhood,
+    timestamp: new Date().toISOString(),
+    source: 'resident',
+  };
+
+  const incident = await store.createIncident({
+    id: `i${Date.now()}`,
+    title: `SOS - ${name}`,
+    description: `${alert.text}${membershipId ? `\nMembership: ${membershipId}` : ''}`,
+    reportType: 'SOS-Emergency',
+    severity: 'Critical',
+    status: 'Open',
+    lat,
+    lng,
+    assignedTo: '',
+    visibleTo: [],
+    media: [],
+    geometry: null,
+    style: { source: 'sos', icon: 'SOS', color: '#dc2626', fillColor: '#ef4444' },
+    createdAt: alert.timestamp,
+    createdBy: alert.userId,
+  });
+
+  io.emit('emergency:alert', alert);
+  io.emit('incident:created', incident);
+  res.json({ ok: true, alert, incident });
+}));
+
+app.get('/api/residents/search', auth, asyncRoute(async (req, res) => {
+  if (!pool) return res.status(503).json({ message: 'Resident search requires the shared Neon database' });
+  const query = String(req.query.query || '').trim();
+  if (query.length < 2) return res.json({ residents: [] });
+  const term = `%${query}%`;
+  const { rows } = await pool.query(
+    `select r.id, r."fullName", r.neighbourhood, r."memberCategory", r."photoUrl",
+      r."approvalStatus", c."membershipId", c.status as "cardStatus",
+      u.phone, u.email
+     from "Resident" r
+     join "User" u on u.id = r."userId"
+     left join "Card" c on c."residentId" = r.id
+     where r."fullName" ilike $1
+        or r.neighbourhood ilike $1
+        or r."memberCategory" ilike $1
+        or r."photoUrl" ilike $1
+        or u.phone ilike $1
+        or coalesce(u.email, '') ilike $1
+        or coalesce(c."membershipId", '') ilike $1
+     order by r."fullName" asc
+     limit 25`,
+    [term],
+  );
+  res.json({ residents: rows });
 }));
 app.get('/api/users', auth, asyncRoute(async (req, res) => res.json(visibleUsersFor(req.user, await store.users()).map(publicUser))));
 app.get('/api/report-viewers', auth, asyncRoute(async (req, res) => res.json(visibleUsersFor(req.user, await store.users()).map(publicUser))));
@@ -691,6 +801,79 @@ app.post('/api/access/verify', auth, asyncRoute(async (req, res) => {
       : null,
   });
 }));
+
+// ── Visitor code verify ────────────────────────────────────────────────────
+
+app.post('/api/visitor/verify', auth, asyncRoute(async (req, res) => {
+  if (!pool) {
+    return res.status(503).json({
+      decision: 'DENIED',
+      reason: 'Visitor verification requires the shared Neon database.',
+      offline: true,
+    });
+  }
+
+  const code = String(req.body.code || '').trim().toUpperCase();
+  const gate = String(req.body.gate || 'Main Gate').trim().slice(0, 80) || 'Main Gate';
+  if (!code) return res.status(400).json({ decision: 'DENIED', reason: 'No visitor code provided' });
+
+  const { rows } = await pool.query(
+    `select vp.id, vp.code, vp.label, vp."usedAt", vp."expiresAt",
+       r.id as "residentId", r."fullName", r.neighbourhood, r."memberCategory"
+     from visitor_passes vp
+     join "Resident" r on r.id = vp."residentId"
+     where upper(vp.code) = upper($1)
+     limit 1`,
+    [code],
+  );
+
+  const pass = rows[0];
+
+  if (!pass) {
+    return res.status(403).json({ decision: 'DENIED', reason: 'Visitor code not found' });
+  }
+  if (pass.usedAt) {
+    return res.status(403).json({ decision: 'DENIED', reason: 'Visitor code has already been used', visitorName: pass.label || null });
+  }
+  if (new Date(pass.expiresAt) < new Date()) {
+    return res.status(403).json({ decision: 'DENIED', reason: 'Visitor code has expired', visitorName: pass.label || null });
+  }
+
+  // Mark as used
+  await pool.query(
+    `update visitor_passes set "usedAt" = now() where id = $1`,
+    [pass.id],
+  );
+
+  // Log access event
+  const eventId = `visitor-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  await pool.query(
+    `insert into security_access_events
+      (id, resident_id, resident_name, direction, gate, decision, reason, scan_note, is_override, scanned_by)
+     values ($1,$2,$3,'ENTRY',$4,'ALLOWED','Visitor pass verified',$5,false,$6)`,
+    [eventId, pass.residentId, pass.fullName, gate, pass.label ? `Visitor: ${pass.label}` : 'Visitor pass', req.user.id],
+  );
+
+  io.to('gate-events').emit('gate:event', {
+    id: eventId, decision: 'ALLOWED', direction: 'ENTRY', gate,
+    reason: 'Visitor pass verified',
+    membershipId: 'VISITOR',
+    residentName: `${pass.fullName} (visitor${pass.label ? `: ${pass.label}` : ''})`,
+    scannedAt: new Date().toISOString(),
+    isOverride: false,
+  });
+
+  res.json({
+    decision: 'ALLOWED',
+    reason: 'Visitor pass verified — single use consumed',
+    gate,
+    visitorLabel: pass.label || null,
+    residentName: pass.fullName,
+    residentNeighbourhood: pass.neighbourhood,
+    residentCategory: pass.memberCategory,
+  });
+}));
+
 app.post('/api/users', auth, asyncRoute(async (req, res) => {
   if (!canManageUsers(req.user)) return res.status(403).json({ message: 'You do not have lower ranks to manage' });
   const email = String(req.body.email || '').trim().toLowerCase();

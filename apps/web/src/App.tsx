@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BadgeCheck,
   Bell,
@@ -31,6 +31,9 @@ import {
   Pencil,
   Trash2,
   Phone,
+  Download,
+  Ticket,
+  RefreshCw,
 } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import AuthScreen from './AuthScreen';
@@ -61,6 +64,10 @@ import {
   getMyRenewals,
   requestRenewal,
   type ResidentRenewalsResponse,
+  getMyVisitorPasses,
+  createVisitorPass,
+  deleteVisitorPass,
+  type VisitorPass,
 } from './api';
 
 type View = 'home' | 'directory' | 'card' | 'activity' | 'profile' | 'dependants' | 'support';
@@ -76,11 +83,11 @@ const navItems: { id: View; label: string; icon: typeof Home }[] = [
 const TOKEN_KEY = 'bodija-resident-token';
 
 function initials(name: string) {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || 'BV';
 }
 
 function firstName(name: string) {
-  return name.trim().split(/\s+/)[0];
+  return name.trim().split(/\s+/)[0] || 'resident';
 }
 
 function formatDate(value: string | null | undefined) {
@@ -132,12 +139,15 @@ function Sidebar({ view, setView, open, close, resident, logout }: { view: View;
   );
 }
 
-function Header({ title, openMenu, resident, unreadCount, onBellClick }: { title: string; openMenu: () => void; resident: ResidentProfile; unreadCount: number; onBellClick: () => void }) {
+function Header({ title, openMenu, resident, unreadCount, onBellClick, onSosClick, sosSending }: { title: string; openMenu: () => void; resident: ResidentProfile; unreadCount: number; onBellClick: () => void; onSosClick: () => void; sosSending: boolean }) {
   return (
     <header className="topbar">
       <button className="icon-button menu-button" onClick={openMenu} aria-label="Open menu"><Menu size={21} /></button>
       <div><span className="eyebrow">Resident portal</span><h1>{title}</h1></div>
       <div className="top-actions">
+        <button className="sos-button" onClick={onSosClick} disabled={sosSending} title="Send SOS alert to security">
+          <AlertTriangle size={17} /> {sosSending ? 'Sending' : 'SOS'}
+        </button>
         <button className="icon-button notification" aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`} onClick={onBellClick}>
           <Bell size={20} />
           {unreadCount > 0 && <i />}
@@ -253,11 +263,11 @@ function ApprovalTimeline({ resident }: { resident: ResidentProfile }) {
   );
 }
 
-function ValueCard({ resident, compact = false }: { resident: ResidentProfile; compact?: boolean }) {
+function ValueCard({ resident, compact = false, cardRef }: { resident: ResidentProfile; compact?: boolean; cardRef?: React.RefObject<HTMLDivElement | null> }) {
   const card = resident.card;
   const isActive = card?.status === 'ACTIVE';
   return (
-    <div className={`value-card ${compact ? 'compact' : ''}`}>
+    <div className={`value-card ${compact ? 'compact' : ''}`} ref={cardRef}>
       <div className="card-glow" />
       <div className="card-top"><Brand /><span className={`card-active ${isActive ? '' : 'pending'}`}><i /> {card ? humanStatus(card.status) : 'Not issued'}</span></div>
       <div className="member-details">
@@ -268,7 +278,11 @@ function ValueCard({ resident, compact = false }: { resident: ResidentProfile; c
       <div className="card-bottom">
         <div><small>Cluster</small><strong>{resident.neighbourhood}</strong></div>
         <div><small>Valid until</small><strong>{formatDate(card?.expiresAt)}</strong></div>
-        {card && <div className="qr"><QRCode value={card.qrToken} size={58} bgColor="transparent" fgColor="#12344d" /></div>}
+        {card && (
+          <div className="qr">
+            <QRCode value={card.qrToken} size={compact ? 68 : 126} bgColor="transparent" fgColor="#12344d" />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -394,6 +408,17 @@ function CardPage({ resident, token }: { resident: ResidentProfile; token: strin
   const [loadingRenewals, setLoadingRenewals] = useState(false);
   const [renewalError, setRenewalError] = useState<string | null>(null);
   const [requestingRenewal, setRequestingRenewal] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  // Visitor passes
+  const [passes, setPasses] = useState<VisitorPass[]>([]);
+  const [passesLoading, setPassesLoading] = useState(false);
+  const [passError, setPassError] = useState<string | null>(null);
+  const [creatingPass, setCreatingPass] = useState(false);
+  const [passLabel, setPassLabel] = useState('');
+  const [showPassForm, setShowPassForm] = useState(false);
+
+  const cardRef = useRef<HTMLDivElement>(null);
 
   const loadRenewals = useCallback(async () => {
     setLoadingRenewals(true);
@@ -408,9 +433,23 @@ function CardPage({ resident, token }: { resident: ResidentProfile; token: strin
     }
   }, [token]);
 
+  const loadPasses = useCallback(async () => {
+    setPassesLoading(true);
+    setPassError(null);
+    try {
+      const data = await getMyVisitorPasses(token);
+      setPasses(data.passes);
+    } catch {
+      // non-critical — visitor passes may not be enabled yet
+    } finally {
+      setPassesLoading(false);
+    }
+  }, [token]);
+
   useEffect(() => {
     void loadRenewals();
-  }, [loadRenewals]);
+    void loadPasses();
+  }, [loadRenewals, loadPasses]);
 
   const requestRenewalNow = async () => {
     if (!window.confirm('Request a renewal for your resident card?')) return;
@@ -426,8 +465,61 @@ function CardPage({ resident, token }: { resident: ResidentProfile; token: strin
     }
   };
 
+  const downloadCard = async () => {
+    if (!cardRef.current) return;
+    setDownloading(true);
+    try {
+      const { default: html2canvas } = await import('html2canvas');
+      const canvas = await html2canvas(cardRef.current, {
+        backgroundColor: null,
+        scale: 3,
+        useCORS: true,
+        logging: false,
+      });
+      const link = document.createElement('a');
+      link.download = `bodija-value-card-${card?.membershipId || 'card'}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch {
+      alert('Unable to download card. Try again.');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleCreatePass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (passes.length >= 5) {
+      setPassError('You can have at most 5 active visitor passes. Delete an existing one to create a new one.');
+      return;
+    }
+    setCreatingPass(true);
+    setPassError(null);
+    try {
+      await createVisitorPass(token, passLabel);
+      setPassLabel('');
+      setShowPassForm(false);
+      await loadPasses();
+    } catch (error) {
+      setPassError(error instanceof Error ? error.message : 'Unable to create visitor pass.');
+    } finally {
+      setCreatingPass(false);
+    }
+  };
+
+  const handleDeletePass = async (id: string) => {
+    if (!window.confirm('Revoke this visitor pass? The code will no longer work at the gate.')) return;
+    try {
+      await deleteVisitorPass(token, id);
+      await loadPasses();
+    } catch {
+      setPassError('Unable to delete visitor pass.');
+    }
+  };
+
   const latestRenewal = renewalState?.renewals[0];
   const canRequestRenewal = Boolean(card && resident.approvalStatus === 'APPROVED' && !renewalState?.hasPendingRenewal);
+  const canCreatePass = active && passes.length < 5;
 
   return (
     <div className="page-content narrow-page">
@@ -443,7 +535,7 @@ function CardPage({ resident, token }: { resident: ResidentProfile; token: strin
         }</p>
       </div>
       <ApprovalTimeline resident={resident} />
-      {/* Expiry reminder banner — shown when ≤30 days remain on an active card */}
+      {/* Expiry reminder banner */}
       {active && renewalState !== null && renewalState.daysUntilExpiry !== null && renewalState.daysUntilExpiry <= 30 && renewalState.daysUntilExpiry > 0 && (
         <div className="approval-timeline timeline-suspended" style={{ marginBottom: 16 }}>
           <span className="timeline-icon"><AlertTriangle size={18} /></span>
@@ -463,13 +555,16 @@ function CardPage({ resident, token }: { resident: ResidentProfile; token: strin
           </div>
         </div>
       )}
-      <ValueCard resident={resident} />
+      <ValueCard resident={resident} cardRef={cardRef} />
       <div className="card-actions">
         <button className="primary-button" disabled={!active}>
           <ShieldCheck size={17} /> {active ? 'Show verification code' : suspended ? 'Card suspended' : rejected ? 'Application rejected' : 'Approval pending'}
         </button>
         <button className="secondary-button" type="button" onClick={requestRenewalNow} disabled={!canRequestRenewal || requestingRenewal}>
           <Clock3 size={17} /> {requestingRenewal ? 'Submitting…' : renewalState?.hasPendingRenewal ? 'Renewal pending' : 'Request renewal'}
+        </button>
+        <button className="outline-button" type="button" onClick={downloadCard} disabled={downloading || !card}>
+          <Download size={17} /> {downloading ? 'Saving…' : 'Download card'}
         </button>
       </div>
       <div className="status-panel">
@@ -487,6 +582,79 @@ function CardPage({ resident, token }: { resident: ResidentProfile; token: strin
           <div><span>Reason</span><strong>{latestRenewal.reason || latestRenewal.note || '—'}</strong></div>
         </div>
       )}
+
+      {/* ── Visitor passes ─────────────────────────────────────────── */}
+      <div className="visitor-passes-section">
+        <div className="section-title" style={{ marginBottom: 12 }}>
+          <div>
+            <h3><Ticket size={17} style={{ marginRight: 7, verticalAlign: 'middle' }} />Visitor passes</h3>
+            <p className="section-subtitle">Generate a one-time gate code for a guest. Each code works once and expires after 24 hours.</p>
+          </div>
+          {canCreatePass && (
+            <button className="outline-button" onClick={() => setShowPassForm(v => !v)}>
+              <Plus size={15} /> New pass
+            </button>
+          )}
+        </div>
+
+        {!active && (
+          <p className="pass-inactive-note">Visitor passes are only available when your card is active.</p>
+        )}
+
+        {showPassForm && (
+          <form className="visitor-pass-form" onSubmit={handleCreatePass}>
+            <input
+              value={passLabel}
+              onChange={e => setPassLabel(e.target.value)}
+              placeholder="Label (e.g. John's visit) — optional"
+              maxLength={60}
+            />
+            <button className="primary-button" type="submit" disabled={creatingPass}>
+              {creatingPass ? 'Generating…' : 'Generate code'}
+            </button>
+            <button className="outline-button" type="button" onClick={() => setShowPassForm(false)}>
+              Cancel
+            </button>
+          </form>
+        )}
+
+        {passError && <div className="auth-error" role="alert" style={{ marginBottom: 10 }}>{passError}</div>}
+
+        {passesLoading ? (
+          <p className="pass-inactive-note">Loading passes…</p>
+        ) : passes.length === 0 ? (
+          <p className="pass-inactive-note">No visitor passes yet.{active ? ' Create one above.' : ''}</p>
+        ) : (
+          <div className="visitor-pass-list">
+            {passes.map(pass => {
+              const expired = new Date(pass.expiresAt) < new Date();
+              const used = !!pass.usedAt;
+              return (
+                <div key={pass.id} className={`visitor-pass-item ${used ? 'used' : expired ? 'expired' : 'active'}`}>
+                  <div className="pass-code-block">
+                    <span className="pass-code">{pass.code}</span>
+                    <span className={`pass-badge ${used ? 'used' : expired ? 'expired' : 'active'}`}>
+                      {used ? 'Used' : expired ? 'Expired' : 'Active'}
+                    </span>
+                  </div>
+                  <div className="pass-meta">
+                    {pass.label && <strong>{pass.label}</strong>}
+                    <small>Created {formatDate(pass.createdAt)} · Expires {new Date(pass.expiresAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small>
+                    {pass.usedAt && <small>Used {new Date(pass.usedAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small>}
+                  </div>
+                  <button className="pass-delete-btn" onClick={() => handleDeletePass(pass.id)} title="Revoke pass" aria-label="Revoke pass">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {active && passes.length >= 5 && (
+          <p className="pass-inactive-note" style={{ marginTop: 8 }}>Maximum 5 passes reached. Delete an existing one to create a new one.</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -953,13 +1121,15 @@ function SupportPage({ token }: { token: string }) {
 }
 
 function ResidentPortal({ session, logout }: { session: AuthSession; logout: () => void }) {
-  const [view, setView] = useState<View>('home');
+  const [view, setView] = useState<View>(session.resident.isProfileComplete ? 'home' : 'profile');
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [resident, setResident] = useState(session.resident);
   const [dashboard, setDashboard] = useState<ResidentDashboardResponse | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [sosSending, setSosSending] = useState(false);
+  const [sosMessage, setSosMessage] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -1009,18 +1179,57 @@ function ResidentPortal({ session, logout }: { session: AuthSession; logout: () 
     }
   };
 
+  const sendSos = async () => {
+    setSosSending(true);
+    setSosMessage(null);
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000 });
+      });
+      const securityUrl = (import.meta.env.VITE_SECURITY_API_URL || 'http://127.0.0.1:5001').replace(/\/$/, '');
+      const response = await fetch(`${securityUrl}/api/resident/sos`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.accessToken}`,
+        },
+        body: JSON.stringify({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          name: resident.fullName || 'Resident',
+          text: `${resident.card?.membershipId || 'Resident'} emergency alert`,
+          type: 'Resident SOS',
+          unit: resident.neighbourhood,
+          command: resident.neighbourhood,
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.message || 'Unable to send SOS alert');
+      setSosMessage('SOS sent to security with your current location.');
+    } catch (error) {
+      setSosMessage(error instanceof Error ? error.message : 'Unable to send SOS alert.');
+    } finally {
+      setSosSending(false);
+    }
+  };
+
   const titles: Record<View, string> = { home: 'Overview', directory: 'Explore benefits', card: 'My value card', activity: 'Activity', profile: 'My profile', dependants: 'Dependants', support: 'Help and support' };
+  const profileLocked = !resident.isProfileComplete;
+  const activeView = profileLocked ? 'profile' : view;
 
   return (
     <div className="app-shell">
       <Sidebar view={view} setView={setView} open={menuOpen} close={() => setMenuOpen(false)} resident={resident} logout={logout} />
       <main className="main-area">
         <Header
-          title={titles[view]}
+          title={titles[activeView]}
           openMenu={() => setMenuOpen(true)}
           resident={resident}
           unreadCount={unreadCount}
           onBellClick={() => setNotifOpen(true)}
+          onSosClick={sendSos}
+          sosSending={sosSending}
         />
         <NotificationPanel
           open={notifOpen}
@@ -1029,18 +1238,26 @@ function ResidentPortal({ session, logout }: { session: AuthSession; logout: () 
           onMarkRead={handleMarkRead}
           onMarkAllRead={handleMarkAllRead}
         />
-        {view === 'home' && <Overview setView={setView} resident={resident} dashboard={dashboard} />}
-        {view === 'directory' && <Directory token={session.accessToken} />}
-        {view === 'card' && <CardPage resident={resident} token={session.accessToken} />}
-        {view === 'activity' && <ActivityPage activity={dashboard?.recentActivity ?? []} rewardBalances={dashboard?.rewardBalances ?? []} />}
-        {view === 'dependants' && <DependantsPage token={session.accessToken} />}
-        {view === 'support' && <SupportPage token={session.accessToken} />}
-        {view === 'profile' && (
+        {sosMessage && <div className={sosMessage.startsWith('SOS sent') ? 'profile-success' : 'auth-error'} role="status" style={{ margin: '0 24px 14px' }}>{sosMessage}</div>}
+        {profileLocked && (
+          <div className="profile-reapproval-warning" role="alert" style={{ margin: '0 24px 14px' }}>
+            <AlertTriangle size={16} />
+            <span>Complete your resident profile before your application can be approved.</span>
+          </div>
+        )}
+        {activeView === 'home' && <Overview setView={setView} resident={resident} dashboard={dashboard} />}
+        {activeView === 'directory' && <Directory token={session.accessToken} />}
+        {activeView === 'card' && <CardPage resident={resident} token={session.accessToken} />}
+        {activeView === 'activity' && <ActivityPage activity={dashboard?.recentActivity ?? []} rewardBalances={dashboard?.rewardBalances ?? []} />}
+        {activeView === 'dependants' && <DependantsPage token={session.accessToken} />}
+        {activeView === 'support' && <SupportPage token={session.accessToken} />}
+        {activeView === 'profile' && (
           <ProfilePage
             resident={resident}
             token={session.accessToken}
             onProfileUpdated={nextResident => {
               setResident(nextResident);
+              if (nextResident.isProfileComplete && view === 'profile') setView('home');
               // Reload notifications — re-approval will have added one
               loadNotifications();
             }}
@@ -1049,7 +1266,7 @@ function ResidentPortal({ session, logout }: { session: AuthSession; logout: () 
       </main>
       <nav className="mobile-nav" aria-label="Mobile navigation">
         {navItems.map(({ id, label, icon: Icon }) => (
-          <button key={id} className={view === id ? 'active' : ''} onClick={() => setView(id)}>
+          <button key={id} className={activeView === id ? 'active' : ''} onClick={() => setView(id)} disabled={profileLocked && id !== 'home'}>
             <Icon size={19} /><span>{label === 'Explore benefits' ? 'Benefits' : label.replace('My value ', '')}</span>
           </button>
         ))}

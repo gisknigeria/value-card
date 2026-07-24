@@ -1,4 +1,4 @@
-import { BenefitType, OfferStatus, PrismaClient, RedemptionModel, UserRole } from '@prisma/client';
+import { AdminRole, BenefitType, OfferStatus, PrismaClient, RedemptionModel, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -60,6 +60,7 @@ async function seed() {
     where: { email: 'gisknigeria@gmail.com' },
     update: {
       role: UserRole.ADMIN,
+      adminRole: AdminRole.SUPER_ADMIN,
       isActive: true,
     },
     create: {
@@ -67,6 +68,7 @@ async function seed() {
       email: 'gisknigeria@gmail.com',
       passwordHash: bcrypt.hashSync(adminPassword, 12),
       role: UserRole.ADMIN,
+      adminRole: AdminRole.SUPER_ADMIN,
     },
   });
 

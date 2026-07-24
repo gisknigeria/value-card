@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { CreateComplaintDto } from './dto/create-complaint.dto';
@@ -89,5 +89,31 @@ export class AuthController {
   @Get('admin/me')
   adminMe(@Req() request: AuthenticatedRequest) {
     return this.auth.adminMe(request.user.userId);
+  }
+
+  // ── Visitor passes ─────────────────────────────────────────────────────────
+
+  @UseGuards(JwtAuthGuard)
+  @Get('resident/visitor-passes')
+  getVisitorPasses(@Req() request: AuthenticatedRequest) {
+    return this.auth.getVisitorPasses(request.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('resident/visitor-passes')
+  createVisitorPass(
+    @Req() request: AuthenticatedRequest,
+    @Body() body: { label?: string },
+  ) {
+    return this.auth.createVisitorPass(request.user.userId, body.label);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('resident/visitor-passes/:id')
+  deleteVisitorPass(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
+    return this.auth.deleteVisitorPass(request.user.userId, id);
   }
 }

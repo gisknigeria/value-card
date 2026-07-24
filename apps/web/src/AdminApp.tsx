@@ -27,6 +27,8 @@ import {
   adminUpdateMerchantStatus,
   adminListOffers,
   adminUpdateOfferStatus,
+  adminListUsers,
+  adminUpdateUserPosition,
   listRenewals,
   processRenewal,
   type ApprovalStatus,
@@ -35,6 +37,9 @@ import {
   type AdminOfferItem,
   type AdminOffersResponse,
   type OfferStatus,
+  type AdminRole,
+  type AdminUserPosition,
+  type UserRole,
 } from './api';
 import { PagerBar, ResidentDetailModal, ComplaintsPanel, TransactionAuditPanel, AdminReportsPanel } from './AdminPanels';
 
@@ -46,6 +51,8 @@ interface AdminIdentity {
   id: string;
   email: string;
   role: 'ADMIN';
+  adminRole: AdminRole | null;
+  associationName: string | null;
 }
 
 interface AdminResident {
@@ -556,6 +563,114 @@ function RenewalsPanel({ token }: { token: string }) {
 
 // ── Merchants panel ───────────────────────────────────────────────────
 
+function PositionsPanel({ token, admin }: { token: string; admin: AdminIdentity }) {
+  const [users, setUsers] = useState<AdminUserPosition[]>([]);
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [savingId, setSavingId] = useState('');
+  const canAssign = admin.adminRole === 'SUPER_ADMIN';
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await adminListUsers(token, query);
+      setUsers(data.users);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to load users');
+    } finally {
+      setLoading(false);
+    }
+  }, [token, query]);
+
+  useEffect(() => { const t = window.setTimeout(load, 250); return () => window.clearTimeout(t); }, [load]);
+
+  const updatePosition = async (user: AdminUserPosition, changes: Partial<Pick<AdminUserPosition, 'role' | 'adminRole' | 'associationName'>>) => {
+    if (!canAssign) return;
+    const nextRole = changes.role ?? user.role;
+    const nextAdminRole = nextRole === 'ADMIN' ? (changes.adminRole ?? user.adminRole ?? 'SUPPORT') : undefined;
+    const nextAssociationName = changes.associationName ?? user.associationName ?? user.resident?.neighbourhood ?? '';
+    setSavingId(user.id);
+    setError('');
+    try {
+      const { user: updated } = await adminUpdateUserPosition(token, user.id, {
+        role: nextRole,
+        adminRole: nextAdminRole,
+        associationName: nextAdminRole === 'ASSOCIATION_REP' ? nextAssociationName : nextAssociationName || undefined,
+      });
+      setUsers(prev => prev.map(item => item.id === user.id ? updated : item));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to update position');
+    } finally {
+      setSavingId('');
+    }
+  };
+
+  const adminRoles: AdminRole[] = ['SUPER_ADMIN', 'ASSOCIATION_REP', 'RESIDENT_REVIEWER', 'MERCHANT_REVIEWER', 'SUPPORT', 'AUDITOR', 'REPORTER'];
+  const roles: UserRole[] = ['RESIDENT', 'SECURITY', 'ADMIN', 'MERCHANT'];
+
+  return (
+    <section className="admin-workspace">
+      <div className="admin-toolbar">
+        <div>
+          <strong style={{ fontSize: 13 }}>Assign positions</strong>
+          <p style={{ margin: '3px 0 0', color: 'var(--muted)', fontSize: 11 }}>
+            Association reps can approve residents only inside their assigned community cluster.
+          </p>
+        </div>
+        <label className="admin-search"><Search size={17} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name, phone or email" /></label>
+      </div>
+      {!canAssign && <div className="admin-alert" role="alert">Only a super admin can assign positions.</div>}
+      {error && <div className="admin-alert" role="alert">{error}</div>}
+      <div className="admin-list-head dep-list-head" style={{ gridTemplateColumns: 'minmax(220px,1.4fr) minmax(120px,.7fr) minmax(170px,.9fr) minmax(170px,.9fr)' }}>
+        <span>User</span><span>Portal role</span><span>Admin position</span><span>Association</span>
+      </div>
+      <div className="admin-list">
+        {loading && <div className="admin-empty"><span>Loading users...</span></div>}
+        {!loading && users.map(user => (
+          <article key={user.id} className="admin-resident-row dep-row" style={{ gridTemplateColumns: 'minmax(220px,1.4fr) minmax(120px,.7fr) minmax(170px,.9fr) minmax(170px,.9fr)' }}>
+            <div className="admin-resident-identity">
+              <div className="admin-avatar">{(user.resident?.fullName || user.email || user.phone).split(/\s+/).slice(0, 2).map(part => part[0]).join('').slice(0, 2).toUpperCase()}</div>
+              <div>
+                <strong>{user.resident?.fullName || user.email || user.phone}</strong>
+                <span>{user.email || user.phone}</span>
+                <small>{user.resident?.neighbourhood || 'No resident profile'}</small>
+              </div>
+            </div>
+            <select
+              value={user.role}
+              disabled={!canAssign || savingId === user.id}
+              onChange={e => updatePosition(user, { role: e.target.value as UserRole })}
+              style={{ height: 36, alignSelf: 'center', border: '1px solid var(--line)', borderRadius: 6 }}
+            >
+              {roles.map(role => <option key={role} value={role}>{role}</option>)}
+            </select>
+            <select
+              value={user.adminRole ?? ''}
+              disabled={!canAssign || savingId === user.id || user.role !== 'ADMIN'}
+              onChange={e => updatePosition(user, { adminRole: e.target.value as AdminRole })}
+              style={{ height: 36, alignSelf: 'center', border: '1px solid var(--line)', borderRadius: 6 }}
+            >
+              <option value="">Not admin</option>
+              {adminRoles.map(role => <option key={role} value={role}>{role.replace(/_/g, ' ')}</option>)}
+            </select>
+            <input
+              value={user.associationName ?? ''}
+              disabled={!canAssign || savingId === user.id || user.role !== 'ADMIN'}
+              onChange={e => setUsers(prev => prev.map(item => item.id === user.id ? { ...item, associationName: e.target.value } : item))}
+              onBlur={e => updatePosition(user, { associationName: e.target.value })}
+              placeholder="e.g. Old Bodija"
+              style={{ height: 36, alignSelf: 'center', border: '1px solid var(--line)', borderRadius: 6, padding: '0 9px' }}
+            />
+          </article>
+        ))}
+        {!loading && users.length === 0 && <div className="admin-empty"><Users size={25} /><strong>No users found</strong><span>Registered residents and admins will appear here.</span></div>}
+      </div>
+    </section>
+  );
+}
+
 function MerchantsPanel({ token }: { token: string }) {
   const [data, setData] = useState<AdminMerchantListResponse>({
     merchants: [],
@@ -884,7 +999,7 @@ function AdminLogin({ onLogin }: { onLogin: (token: string, admin: AdminIdentity
 
 // ── Admin dashboard ───────────────────────────────────────────────────
 
-type AdminSection = 'residents' | 'dependants' | 'renewals' | 'merchants' | 'offers' | 'complaints' | 'transactions' | 'reports';
+type AdminSection = 'residents' | 'dependants' | 'positions' | 'renewals' | 'merchants' | 'offers' | 'complaints' | 'transactions' | 'reports';
 
 function AdminDashboard({ token, admin, logout }: { token: string; admin: AdminIdentity; logout: () => void }) {
   const [section, setSection] = useState<AdminSection>('residents');
@@ -912,7 +1027,7 @@ function AdminDashboard({ token, admin, logout }: { token: string; admin: AdminI
       <header className="admin-header">
         <AdminBrand />
         <div className="admin-account">
-          <div><strong>{admin.email}</strong><small>Administrator</small></div>
+          <div><strong>{admin.email}</strong><small>{admin.adminRole ? admin.adminRole.replace(/_/g, ' ') : 'Administrator'}</small></div>
           <button onClick={logout} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
         </div>
       </header>
@@ -944,6 +1059,9 @@ function AdminDashboard({ token, admin, logout }: { token: string; admin: AdminI
           <button className={section === 'dependants' ? 'active' : ''} onClick={() => setSection('dependants')}>
             <Users size={16} /> Dependants
           </button>
+          <button className={section === 'positions' ? 'active' : ''} onClick={() => setSection('positions')}>
+            <ShieldCheck size={16} /> Positions
+          </button>
           <button className={section === 'renewals' ? 'active' : ''} onClick={() => setSection('renewals')}>
             <Clock3 size={16} /> Renewals
           </button>
@@ -966,6 +1084,7 @@ function AdminDashboard({ token, admin, logout }: { token: string; admin: AdminI
 
         {section === 'residents'    && <ResidentsPanel token={token} />}
         {section === 'dependants'   && <DependantsPanel token={token} />}
+        {section === 'positions'    && <PositionsPanel token={token} admin={admin} />}
         {section === 'renewals'     && <RenewalsPanel token={token} />}
         {section === 'merchants'    && <MerchantsPanel token={token} />}
         {section === 'offers'       && <AdminOffersPanel token={token} />}

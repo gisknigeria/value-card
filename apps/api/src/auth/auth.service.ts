@@ -24,6 +24,15 @@ const residentSelect = {
   statusChangedAt: true,
   consentedAt: true,
   createdAt: true,
+  dependants: {
+    select: {
+      id: true,
+      fullName: true,
+      relationship: true,
+      phone: true,
+      approvalStatus: true,
+    },
+  },
   card: {
     select: {
       membershipId: true,
@@ -66,9 +75,9 @@ export class AuthService {
           role: UserRole.RESIDENT,
           resident: {
             create: {
-              fullName: input.fullName.trim(),
-              neighbourhood: input.neighbourhood.trim(),
-              memberCategory: input.memberCategory.trim(),
+              fullName: input.fullName?.trim() || '',
+              neighbourhood: input.neighbourhood?.trim() || '',
+              memberCategory: input.memberCategory?.trim() || 'Resident member',
               consentedAt: new Date(),
               card: {
                 create: {
@@ -82,7 +91,7 @@ export class AuthService {
         include: { resident: { select: residentSelect } },
       });
 
-      return this.createSession(user.id, user.role, user.resident!);
+      return this.createSession(user.id, user.role, this.withProfileStatus(user.resident!));
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException('An account with this phone or email already exists');
@@ -117,7 +126,7 @@ export class AuthService {
       throw new UnauthorizedException('Resident profile not found');
     }
 
-    return this.createSession(user.id, user.role, user.resident);
+    return this.createSession(user.id, user.role, this.withProfileStatus(user.resident));
   }
 
   async loginAdmin(input: LoginDto) {
@@ -142,14 +151,20 @@ export class AuthService {
 
     return {
       accessToken: this.jwt.sign({ sub: user.id, role: user.role }),
-      admin: { id: user.id, email: user.email, role: user.role },
+      admin: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        adminRole: user.adminRole,
+        associationName: user.associationName,
+      },
     };
   }
 
   async adminMe(userId: string) {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, role: UserRole.ADMIN, isActive: true },
-      select: { id: true, email: true, role: true },
+      select: { id: true, email: true, role: true, adminRole: true, associationName: true },
     });
     if (!user) throw new UnauthorizedException('Administrator account is unavailable');
     return { admin: user };
@@ -165,7 +180,7 @@ export class AuthService {
       throw new UnauthorizedException('Resident account is unavailable');
     }
 
-    return { resident: user.resident };
+    return { resident: this.withProfileStatus(user.resident) };
   }
 
   async updateResidentProfile(userId: string, input: UpdateResidentProfileDto) {
@@ -246,7 +261,7 @@ export class AuthService {
         });
       });
 
-      return { resident: updated, requiresReApproval };
+      return { resident: this.withProfileStatus(updated), requiresReApproval };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException('An account with this phone or email already exists');
@@ -352,7 +367,7 @@ export class AuthService {
     const categories = Array.from(new Set(offers.map(offer => offer.merchant.category)));
 
     return {
-      resident,
+      resident: this.withProfileStatus(resident),
       metrics: {
         savedThisMonth: thisMonthSaved,
         rewardBalance: rewardBalanceTotal,
@@ -464,15 +479,119 @@ export class AuthService {
     return { success: true };
   }
 
+  // ── Visitor passes ──────────────────────────────────────────────────────────
+
+  async getVisitorPasses(userId: string) {
+    const resident = await this.prisma.resident.findUnique({ where: { userId } });
+    if (!resident) throw new UnauthorizedException('Resident account is unavailable');
+
+    const passes = await this.prisma.visitorPass.findMany({
+      where: { residentId: resident.id },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return { passes };
+  }
+
+  async createVisitorPass(userId: string, label?: string) {
+    const resident = await this.prisma.resident.findUnique({
+      where: { userId },
+      include: { card: true },
+    });
+    if (!resident) throw new UnauthorizedException('Resident account is unavailable');
+    if (resident.card?.status !== 'ACTIVE') {
+      throw new BadRequestException('Visitor passes can only be created when your card is active');
+    }
+
+    // Count active (non-expired, non-used) passes — max 5
+    const activeCount = await this.prisma.visitorPass.count({
+      where: {
+        residentId: resident.id,
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+    });
+    if (activeCount >= 5) {
+      throw new BadRequestException('Maximum of 5 active visitor passes reached');
+    }
+
+    const code = await this.generateVisitorCode();
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    const pass = await this.prisma.visitorPass.create({
+      data: {
+        residentId: resident.id,
+        code,
+        label: label?.trim() || null,
+        expiresAt,
+      },
+    });
+
+    return { pass };
+  }
+
+  async deleteVisitorPass(userId: string, id: string) {
+    const resident = await this.prisma.resident.findUnique({ where: { userId } });
+    if (!resident) throw new UnauthorizedException('Resident account is unavailable');
+
+    await this.prisma.visitorPass.deleteMany({
+      where: { id, residentId: resident.id },
+    });
+    return { success: true };
+  }
+
+  private async generateVisitorCode(): Promise<string> {
+    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I, O to avoid confusion
+    const digits  = '0123456789';
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const alpha = Array.from({ length: 3 }, () => letters[randomInt(0, letters.length)]).join('');
+      const num   = Array.from({ length: 3 }, () => digits[randomInt(0, digits.length)]).join('');
+      const code  = `${alpha}${num}`;
+      const exists = await this.prisma.visitorPass.findUnique({ where: { code } });
+      if (!exists) return code;
+    }
+    return `VP${randomBytes(3).toString('hex').toUpperCase()}`;
+  }
+
   private createSession(
     userId: string,
     role: UserRole,
-    resident: Prisma.ResidentGetPayload<{ select: typeof residentSelect }>,
+    resident: Prisma.ResidentGetPayload<{ select: typeof residentSelect }> & { isProfileComplete?: boolean },
   ) {
     return {
       accessToken: this.jwt.sign({ sub: userId, role }),
       resident,
     };
+  }
+
+  private withProfileStatus<T extends { fullName: string; neighbourhood: string; memberCategory: string; user: { phone: string }; dependants?: { fullName: string; relationship: string }[] }>(
+    resident: T,
+  ) {
+    return {
+      ...resident,
+      isProfileComplete: this.isResidentProfileComplete(resident),
+    };
+  }
+
+  private isResidentProfileComplete(resident: {
+    fullName: string;
+    neighbourhood: string;
+    memberCategory: string;
+    user: { phone: string };
+    dependants?: { fullName: string; relationship: string }[];
+  }) {
+    const primaryComplete = [
+      resident.fullName,
+      resident.neighbourhood,
+      resident.memberCategory,
+      resident.user.phone,
+    ].every(value => Boolean(value?.trim()));
+
+    const dependantsComplete = (resident.dependants ?? []).every(dependant =>
+      Boolean(dependant.fullName?.trim()) && Boolean(dependant.relationship?.trim()),
+    );
+
+    return primaryComplete && dependantsComplete;
   }
 
   private async createMembershipId() {

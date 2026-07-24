@@ -5,6 +5,7 @@ import { io } from "socket.io-client";
 import Hls from "hls.js";
 import shp from "shpjs";
 import AccessScanner from "./AccessScanner.jsx";
+import "./resident-search.css";
 import {
   FaBullseye,
   FaCamera,
@@ -3732,6 +3733,7 @@ function Dashboard({ session, onLogout }) {
   const [layer, setLayer] = useState("Street");
   const [coords, setCoords] = useState("");
   const [search, setSearch] = useState("");
+  const [residentResults, setResidentResults] = useState([]);
   const [notice, setNotice] = useState("");
   const [manageOfficers, setManageOfficers] = useState(false);
   const [mapDataPanel, setMapDataPanel] = useState(false);
@@ -3876,9 +3878,9 @@ function Dashboard({ session, onLogout }) {
       timeout: 15000,
     });
     socketRef.current = socket;
-    socket.on("connect_error", () =>
-      setNotice("Realtime connection is reconnecting..."),
-    );
+    socket.on("connect_error", () => {
+      // Silently handle reconnection — no toast shown to security officers
+    });
     const announceCameraShare = () =>
       socket.emit("camera:share:start", {
         userId: session.user.id,
@@ -4161,6 +4163,16 @@ function Dashboard({ session, onLogout }) {
     e.preventDefault();
     const term = search.trim().toLowerCase();
     if (!term) return;
+    try {
+      const data = await request(
+        `/residents/search?query=${encodeURIComponent(search.trim())}`,
+        session.token,
+      );
+      setResidentResults(data.residents || []);
+      if (data.residents?.length) return;
+    } catch {
+      setResidentResults([]);
+    }
     const local =
       incidents.find((x) =>
         `${x.title} ${x.description} ${x.status} ${x.severity}`
@@ -4195,6 +4207,26 @@ function Dashboard({ session, onLogout }) {
       }
     }
     setNotice("Location not found");
+  };
+  const focusResidentArea = async (resident) => {
+    const location = resident.neighbourhood || search;
+    const queries = [
+      location,
+      `${location}, Bodija, Ibadan`,
+      `${location}, Oyo State, Nigeria`,
+    ];
+    for (const q of queries) {
+      const data = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&q=${encodeURIComponent(q)}`,
+      )
+        .then((r) => r.json())
+        .catch(() => []);
+      if (data[0]) {
+        mapRef.current.flyTo([+data[0].lat, +data[0].lon], 16);
+        return;
+      }
+    }
+    setNotice("Resident area not found on map");
   };
   const currentUserPoint = () => {
     const point = gpsPositions[session.user.id] || session.user;
@@ -5343,6 +5375,29 @@ function Dashboard({ session, onLogout }) {
             </button>
           )}
         </form>
+        {residentResults.length > 0 && (
+          <div className="resident-search-results">
+            {residentResults.map((resident) => (
+              <button
+                key={resident.id}
+                type="button"
+                className="resident-search-card"
+                onClick={() => focusResidentArea(resident)}
+              >
+                {resident.photoUrl ? (
+                  <img src={resident.photoUrl} alt="" />
+                ) : (
+                  <span>{String(resident.fullName || "R").slice(0, 2).toUpperCase()}</span>
+                )}
+                <div>
+                  <b>{resident.fullName}</b>
+                  <small>{resident.neighbourhood} - {resident.membershipId || "No card"}</small>
+                  <em>{resident.approvalStatus} / {resident.cardStatus || "NO CARD"}</em>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
         {analyticsOpen && canAdmin ? (
           <div className="sidebar-panel-view">
             <div className="sidebar-panel-head">
@@ -6160,7 +6215,6 @@ function Dashboard({ session, onLogout }) {
           onDeleteRoom={deleteChatRoom}
         />
       )}
-      {notice && <div className="toast">OK {notice}</div>}
     </main>
   );
 }

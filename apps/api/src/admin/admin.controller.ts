@@ -9,7 +9,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApprovalStatus, ComplaintStatus } from '@prisma/client';
+import { AdminRole, ApprovalStatus, ComplaintStatus, UserRole } from '@prisma/client';
 import type { Request } from 'express';
 import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -32,6 +32,17 @@ class UpdateTransactionAuditDto {
   @IsOptional() @IsString() @MaxLength(500) auditNote?: string;
 }
 
+class UpdateUserPositionDto {
+  @IsIn(Object.values(UserRole))
+  role!: UserRole;
+
+  @IsOptional()
+  @IsIn(Object.values(AdminRole))
+  adminRole?: AdminRole;
+
+  @IsOptional() @IsString() @MaxLength(120) associationName?: string;
+}
+
 @Controller('admin')
 @UseGuards(JwtAuthGuard, AdminGuard)
 export class AdminController {
@@ -40,16 +51,17 @@ export class AdminController {
   // ── Residents ──────────────────────────────────────────────────────────
   @Get('residents')
   residents(
+    @Req() req: AuthRequest,
     @Query('status') status?: ApprovalStatus,
     @Query('query')  query?: string,
     @Query('page')   page?: string,
   ) {
-    return this.admin.residents(status, query, page ? Number(page) : 1);
+    return this.admin.residents(status, query, page ? Number(page) : 1, req.user.userId);
   }
 
   @Get('residents/:residentId')
-  residentDetail(@Param('residentId') id: string) {
-    return this.admin.residentDetail(id);
+  residentDetail(@Param('residentId') id: string, @Req() req: AuthRequest) {
+    return this.admin.residentDetail(id, req.user.userId);
   }
 
   @Patch('residents/:residentId/status')
@@ -59,6 +71,20 @@ export class AdminController {
     @Req() req: AuthRequest,
   ) {
     return this.admin.updateResidentStatus(id, input.status, req.user.userId, input.reason);
+  }
+
+  @Get('users')
+  users(@Query('query') query?: string) {
+    return this.admin.users(query);
+  }
+
+  @Patch('users/:userId/position')
+  updateUserPosition(
+    @Param('userId') userId: string,
+    @Body() input: UpdateUserPositionDto,
+    @Req() req: AuthRequest,
+  ) {
+    return this.admin.updateUserPosition(userId, req.user.userId, input);
   }
 
   // ── Complaints ─────────────────────────────────────────────────────────

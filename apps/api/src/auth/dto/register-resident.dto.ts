@@ -1,7 +1,6 @@
 import {
   IsBoolean,
   IsEmail,
-  IsNotEmpty,
   IsOptional,
   IsString,
   Matches,
@@ -9,9 +8,9 @@ import {
 } from 'class-validator';
 
 export class RegisterResidentDto {
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  fullName!: string;
+  fullName?: string;
 
   @IsString()
   @Matches(/^[+0-9][0-9\s-]{7,19}$/, {
@@ -27,13 +26,13 @@ export class RegisterResidentDto {
   @MinLength(8)
   password!: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  neighbourhood!: string;
+  neighbourhood?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  memberCategory!: string;
+  memberCategory?: string;
 
   @IsBoolean()
   consent!: boolean;

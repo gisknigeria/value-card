@@ -9,7 +9,7 @@ import {
   Phone,
   UserRound,
 } from 'lucide-react';
-import { loginResident, registerResident, type AuthSession } from './api';
+import { loginAdmin, loginResident, registerResident, type AuthSession } from './api';
 
 type Mode = 'login' | 'register';
 
@@ -47,9 +47,24 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     setError('');
 
     try {
-      const session = mode === 'login'
-        ? await loginResident(form.email || form.phone, form.password)
-        : await registerResident({
+      if (mode === 'login') {
+        try {
+          const session = await loginResident(form.email || form.phone, form.password);
+          onAuthenticated(session);
+          return;
+        } catch (residentError) {
+          try {
+            const adminSession = await loginAdmin(form.email || form.phone, form.password);
+            localStorage.setItem('bodija-admin-token', adminSession.accessToken);
+            window.location.assign('/admin');
+            return;
+          } catch {
+            throw residentError;
+          }
+        }
+      }
+
+      const session = await registerResident({
             fullName: form.fullName,
             phone: form.phone,
             email: form.email || undefined,
@@ -93,8 +108,8 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
           </div>
           <div className="auth-heading">
             <span>Resident portal</span>
-            <h2>{mode === 'login' ? 'Welcome back' : 'Create your resident account'}</h2>
-            <p>{mode === 'login' ? 'Sign in with your email address or phone number.' : 'Your application will be reviewed before gate access is activated.'}</p>
+          <h2>{mode === 'login' ? 'Welcome back' : 'Create your resident account'}</h2>
+            <p>{mode === 'login' ? 'Sign in with your email address or phone number.' : 'Create your login first, then complete your resident profile for approval.'}</p>
           </div>
 
           <div className="auth-tabs" role="tablist" aria-label="Account action">
@@ -107,7 +122,7 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
               <>
                 <label>
                   <span>Full name</span>
-                  <div className="auth-input"><UserRound size={18} /><input required autoComplete="name" value={form.fullName} onChange={event => update('fullName', event.target.value)} placeholder="As shown on your ID" /></div>
+                  <div className="auth-input"><UserRound size={18} /><input autoComplete="name" value={form.fullName} onChange={event => update('fullName', event.target.value)} placeholder="Can be completed after login" /></div>
                 </label>
                 <div className="auth-field-row">
                   <label>
@@ -116,7 +131,7 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                   </label>
                   <label>
                     <span>Neighbourhood</span>
-                    <div className="auth-input"><MapPin size={18} /><input required value={form.neighbourhood} onChange={event => update('neighbourhood', event.target.value)} placeholder="Old Bodija" /></div>
+                    <div className="auth-input"><MapPin size={18} /><input value={form.neighbourhood} onChange={event => update('neighbourhood', event.target.value)} placeholder="Old Bodija" /></div>
                   </label>
                 </div>
               </>

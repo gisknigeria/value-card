@@ -1,5 +1,5 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { ApprovalStatus, CardStatus, ComplaintStatus, Prisma } from '@prisma/client';
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { AdminRole, ApprovalStatus, CardStatus, ComplaintStatus, Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateResidentStatusDto } from './dto/update-resident-status.dto';
 
@@ -16,6 +16,14 @@ const adminResidentSelect = {
   statusChangedBy: true,
   consentedAt: true,
   createdAt: true,
+  dependants: {
+    select: {
+      id: true,
+      fullName: true,
+      relationship: true,
+      approvalStatus: true,
+    },
+  },
   user: { select: { phone: true, email: true } },
   card: {
     select: { membershipId: true, status: true, issuedAt: true, expiresAt: true },
@@ -27,9 +35,11 @@ export class AdminService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   // ── Resident list with pagination ─────────────────────────────────────
-  async residents(status?: ApprovalStatus, query?: string, page = 1) {
+  async residents(status?: ApprovalStatus, query?: string, page = 1, adminUserId?: string) {
     const search = query?.trim();
+    const scope = await this.residentScope(adminUserId);
     const where: Prisma.ResidentWhereInput = {
+      ...scope,
       ...(status ? { approvalStatus: status } : {}),
       ...(search ? {
         OR: [
@@ -46,19 +56,20 @@ export class AdminService {
     const [residents, total, pending, approved, rejected, suspended] = await Promise.all([
       this.prisma.resident.findMany({ where, select: adminResidentSelect, orderBy: { createdAt: 'desc' }, skip, take: PAGE_SIZE }),
       this.prisma.resident.count({ where }),
-      this.prisma.resident.count({ where: { approvalStatus: ApprovalStatus.PENDING } }),
-      this.prisma.resident.count({ where: { approvalStatus: ApprovalStatus.APPROVED } }),
-      this.prisma.resident.count({ where: { approvalStatus: ApprovalStatus.REJECTED } }),
-      this.prisma.resident.count({ where: { approvalStatus: ApprovalStatus.SUSPENDED } }),
+      this.prisma.resident.count({ where: { ...scope, approvalStatus: ApprovalStatus.PENDING } }),
+      this.prisma.resident.count({ where: { ...scope, approvalStatus: ApprovalStatus.APPROVED } }),
+      this.prisma.resident.count({ where: { ...scope, approvalStatus: ApprovalStatus.REJECTED } }),
+      this.prisma.resident.count({ where: { ...scope, approvalStatus: ApprovalStatus.SUSPENDED } }),
     ]);
 
     return { residents, total, page, pageSize: PAGE_SIZE, counts: { pending, approved, rejected, suspended } };
   }
 
   // ── Resident detail (full history) ────────────────────────────────────
-  async residentDetail(residentId: string) {
-    const resident = await this.prisma.resident.findUnique({
-      where: { id: residentId },
+  async residentDetail(residentId: string, adminUserId?: string) {
+    const scope = await this.residentScope(adminUserId);
+    const resident = await this.prisma.resident.findFirst({
+      where: { id: residentId, ...scope },
       select: {
         ...adminResidentSelect,
         card: {
@@ -100,11 +111,24 @@ export class AdminService {
 
   // ── Update resident status ─────────────────────────────────────────────
   async updateResidentStatus(residentId: string, status: ApprovalStatus, adminUserId: string, reason?: string) {
-    const resident = await this.prisma.resident.findUnique({
-      where: { id: residentId },
-      select: { id: true, userId: true, card: { select: { id: true } } },
+    const scope = await this.residentScope(adminUserId);
+    const resident = await this.prisma.resident.findFirst({
+      where: { id: residentId, ...scope },
+      select: {
+        id: true,
+        userId: true,
+        fullName: true,
+        neighbourhood: true,
+        memberCategory: true,
+        user: { select: { phone: true } },
+        dependants: { select: { fullName: true, relationship: true } },
+        card: { select: { id: true } },
+      },
     });
     if (!resident) throw new NotFoundException('Resident application not found');
+    if (status === ApprovalStatus.APPROVED && !this.isProfileComplete(resident)) {
+      throw new BadRequestException('Resident must complete profile and dependant details before approval');
+    }
 
     const now = new Date();
     const expiresAt = new Date(now); expiresAt.setFullYear(expiresAt.getFullYear() + 1);
@@ -120,6 +144,91 @@ export class AdminService {
       await tx.notification.create({ data: { userId: resident.userId, type: `RESIDENT_${status}`, title: notif.title, body: notif.body } });
       return tx.resident.findUniqueOrThrow({ where: { id: residentId }, select: adminResidentSelect });
     });
+  }
+
+  async users(query?: string) {
+    const search = query?.trim();
+    const where: Prisma.UserWhereInput = search
+      ? {
+          OR: [
+            { phone: { contains: search } },
+            { email: { contains: search, mode: 'insensitive' } },
+            { resident: { fullName: { contains: search, mode: 'insensitive' } } },
+          ],
+        }
+      : {};
+
+    const users = await this.prisma.user.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: {
+        id: true,
+        phone: true,
+        email: true,
+        role: true,
+        adminRole: true,
+        associationName: true,
+        isActive: true,
+        createdAt: true,
+        resident: {
+          select: {
+            fullName: true,
+            neighbourhood: true,
+            approvalStatus: true,
+          },
+        },
+      },
+    });
+
+    return { users };
+  }
+
+  async updateUserPosition(
+    userId: string,
+    actorUserId: string,
+    input: { role: UserRole; adminRole?: AdminRole | null; associationName?: string | null; isActive?: boolean },
+  ) {
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: { adminRole: true },
+    });
+    if (actor?.adminRole !== AdminRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only a super admin can assign positions');
+    }
+
+    const role = input.role;
+    const adminRole = role === UserRole.ADMIN ? (input.adminRole ?? AdminRole.SUPPORT) : null;
+    const associationName =
+      adminRole === AdminRole.ASSOCIATION_REP
+        ? input.associationName?.trim()
+        : input.associationName?.trim() || null;
+
+    if (adminRole === AdminRole.ASSOCIATION_REP && !associationName) {
+      throw new BadRequestException('Association representative requires an association name');
+    }
+
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        role,
+        adminRole,
+        associationName,
+        isActive: input.isActive ?? true,
+      },
+      select: {
+        id: true,
+        phone: true,
+        email: true,
+        role: true,
+        adminRole: true,
+        associationName: true,
+        isActive: true,
+        resident: { select: { fullName: true, neighbourhood: true, approvalStatus: true } },
+      },
+    });
+
+    return { user };
   }
 
   // ── Complaints queue ──────────────────────────────────────────────────
@@ -273,5 +382,38 @@ export class AdminService {
       SUSPENDED: { title: 'Your card has been suspended', body: `Your card has been suspended by BERA.${r} Gate access is paused.` },
     };
     return map[status] ?? { title: 'Status updated', body: `Status updated to ${status.toLowerCase()}.${r}` };
+  }
+
+  private async residentScope(adminUserId?: string): Promise<Prisma.ResidentWhereInput> {
+    if (!adminUserId) return {};
+    const user = await this.prisma.user.findUnique({
+      where: { id: adminUserId },
+      select: { adminRole: true, associationName: true },
+    });
+    if (user?.adminRole === AdminRole.ASSOCIATION_REP) {
+      if (!user.associationName?.trim()) {
+        throw new ForbiddenException('Association representative has no association assigned');
+      }
+      return { neighbourhood: { equals: user.associationName.trim(), mode: 'insensitive' } };
+    }
+    return {};
+  }
+
+  private isProfileComplete(resident: {
+    fullName: string;
+    neighbourhood: string;
+    memberCategory: string;
+    user: { phone: string };
+    dependants: { fullName: string; relationship: string }[];
+  }) {
+    return [
+      resident.fullName,
+      resident.neighbourhood,
+      resident.memberCategory,
+      resident.user.phone,
+    ].every(value => Boolean(value?.trim())) &&
+      resident.dependants.every(dependant =>
+        Boolean(dependant.fullName?.trim()) && Boolean(dependant.relationship?.trim()),
+      );
   }
 }

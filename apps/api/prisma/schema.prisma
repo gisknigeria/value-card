@@ -51,6 +51,7 @@ enum OfferStatus {
 
 enum AdminRole {
   SUPER_ADMIN
+  ASSOCIATION_REP
   RESIDENT_REVIEWER
   MERCHANT_REVIEWER
   SUPPORT
@@ -77,6 +78,7 @@ model User {
   passwordHash String
   role         UserRole
   adminRole    AdminRole?
+  associationName String?
   isActive     Boolean    @default(true)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
@@ -108,6 +110,7 @@ model Resident {
   rewardBalances   RewardBalance[]
   cardHistory      CardHistory[]
   rewardLedger     RewardLedger[]
+  visitorPasses    VisitorPass[]
 }
 
 model Dependant {
@@ -353,4 +356,19 @@ model Notification {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+model VisitorPass {
+  id         String    @id @default(cuid())
+  residentId String
+  resident   Resident  @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  code       String    @unique
+  label      String?
+  usedAt     DateTime?
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+
+  @@index([residentId])
+  @@index([code])
+  @@map("visitor_passes")
 }

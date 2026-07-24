@@ -11,6 +11,7 @@ export interface ResidentProfile {
   statusChangedAt: string | null;
   consentedAt: string;
   createdAt: string;
+  isProfileComplete: boolean;
   user: {
     phone: string;
     email: string | null;
@@ -205,6 +206,22 @@ export function loginResident(identifier: string, password: string) {
   });
 }
 
+export function loginAdmin(identifier: string, password: string) {
+  return apiRequest<{
+    accessToken: string;
+    admin: {
+      id: string;
+      email: string | null;
+      role: 'ADMIN';
+      adminRole: AdminRole | null;
+      associationName: string | null;
+    };
+  }>('/api/auth/admin/login', {
+    method: 'POST',
+    body: JSON.stringify({ identifier, password }),
+  });
+}
+
 export function getResident(token: string) {
   return apiRequest<{ resident: ResidentProfile }>('/api/auth/resident/me', {
     headers: { Authorization: `Bearer ${token}` },
@@ -300,6 +317,42 @@ export function requestRenewal(token: string, note?: string) {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify({ note: note?.trim() || undefined }),
+  });
+}
+
+// ── Visitor passes ────────────────────────────────────────────────────────
+
+export interface VisitorPass {
+  id: string;
+  code: string;
+  label: string | null;
+  usedAt: string | null;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface VisitorPassesResponse {
+  passes: VisitorPass[];
+}
+
+export function getMyVisitorPasses(token: string) {
+  return apiRequest<VisitorPassesResponse>('/api/auth/resident/visitor-passes', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function createVisitorPass(token: string, label?: string) {
+  return apiRequest<{ pass: VisitorPass }>('/api/auth/resident/visitor-passes', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ label: label?.trim() || undefined }),
+  });
+}
+
+export function deleteVisitorPass(token: string, id: string) {
+  return apiRequest<{ success: boolean }>(`/api/auth/resident/visitor-passes/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
   });
 }
 
@@ -411,6 +464,51 @@ export interface MerchantSession {
 export interface AdminMerchantListResponse {
   merchants: MerchantProfile[];
   counts: { pending: number; approved: number; rejected: number; suspended: number };
+}
+
+export type UserRole = 'RESIDENT' | 'MERCHANT' | 'SECURITY' | 'ADMIN';
+export type AdminRole =
+  | 'SUPER_ADMIN'
+  | 'ASSOCIATION_REP'
+  | 'RESIDENT_REVIEWER'
+  | 'MERCHANT_REVIEWER'
+  | 'SUPPORT'
+  | 'AUDITOR'
+  | 'REPORTER';
+
+export interface AdminUserPosition {
+  id: string;
+  phone: string;
+  email: string | null;
+  role: UserRole;
+  adminRole: AdminRole | null;
+  associationName: string | null;
+  isActive: boolean;
+  resident: {
+    fullName: string;
+    neighbourhood: string;
+    approvalStatus: ApprovalStatus;
+  } | null;
+}
+
+export function adminListUsers(token: string, query?: string) {
+  const p = new URLSearchParams();
+  if (query?.trim()) p.set('query', query.trim());
+  return apiRequest<{ users: AdminUserPosition[] }>(`/api/admin/users${p.toString() ? `?${p}` : ''}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function adminUpdateUserPosition(token: string, userId: string, input: {
+  role: UserRole;
+  adminRole?: AdminRole;
+  associationName?: string;
+}) {
+  return apiRequest<{ user: AdminUserPosition }>(`/api/admin/users/${userId}/position`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input),
+  });
 }
 
 export function registerMerchant(input: {
