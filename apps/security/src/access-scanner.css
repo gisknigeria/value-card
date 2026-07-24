@@ -13,10 +13,10 @@
   width: min(1040px, 100%);
   max-height: min(880px, calc(100vh - 48px));
   overflow: auto;
-  border: 1px solid #243b50;
+  border: 1px solid #2e4422;
   border-radius: 8px;
-  background: #0a1724;
-  color: #e8f0f5;
+  background: #141d11;
+  color: #d5e2c8;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
 }
 
@@ -26,8 +26,8 @@
   justify-content: space-between;
   gap: 20px;
   padding: 24px 26px 20px;
-  border-bottom: 1px solid #1f3447;
-  background: #0d1d2c;
+  border-bottom: 1px solid #253320;
+  background: #18240f;
 }
 
 .access-head h2 {
@@ -44,7 +44,7 @@
 
 .access-head p {
   margin: 0;
-  color: #8fa6b7;
+  color: #8a9e7c;
   font-size: 13px;
 }
 
@@ -54,10 +54,10 @@
   flex: 0 0 38px;
   display: grid;
   place-items: center;
-  border: 1px solid #2b4256;
+  border: 1px solid #3a5830;
   border-radius: 50%;
   background: transparent;
-  color: #b9c9d4;
+  color: #a0b490;
 }
 
 .access-body {
@@ -83,17 +83,17 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: 1px solid #2b4357;
+  border: 1px solid #2e4422;
   border-radius: 5px;
-  background: #101f2e;
-  color: #aebfca;
+  background: #18240f;
+  color: #a0b490;
   font-weight: 700;
 }
 
 .access-direction button.active {
-  border-color: #b8873d;
-  background: #2c271e;
-  color: #e4c282;
+  border-color: #c6974c;
+  background: #2a2010;
+  color: #e4c882;
 }
 
 .access-field {
@@ -110,10 +110,10 @@
 .access-token {
   width: 100%;
   min-height: 46px;
-  border: 1px solid #294054;
+  border: 1px solid #2e4422;
   border-radius: 5px;
-  background: #07131f;
-  color: #edf4f8;
+  background: #0d1509;
+  color: #d5e2c8;
 }
 
 .access-field select {
@@ -137,7 +137,7 @@
   border: 0;
   outline: 0;
   background: transparent;
-  color: #edf4f8;
+  color: #d5e2c8;
   font-size: 15px;
   text-transform: none;
 }
@@ -150,8 +150,8 @@
 }
 
 .access-actions .access-primary {
-  border-color: #b8873d;
-  background: #9a6b2f;
+  border-color: #c6974c;
+  background: #7a5520;
   color: #fff;
 }
 
