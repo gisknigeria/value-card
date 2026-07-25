@@ -105,6 +105,53 @@ async function seed() {
     },
   });
 
+  // ── Test merchant (pre-approved, login with merchant@community.local / merchant123) ──
+  const testMerchantEmail = 'merchant@community.local';
+  const testMerchantPhone = '08099990001';
+
+  const testMerchant = await prisma.merchant.upsert({
+    where: { businessName: 'Community Test Store' },
+    update: { approvalStatus: 'APPROVED' },
+    create: {
+      businessName: 'Community Test Store',
+      category: 'General',
+      contactPerson: 'Test Merchant',
+      phone: testMerchantPhone,
+      email: testMerchantEmail,
+      location: 'Bodija, Ibadan',
+      approvalStatus: 'APPROVED',
+    },
+  });
+
+  const testMerchantUser = await prisma.user.upsert({
+    where: { email: testMerchantEmail },
+    update: {
+      role: UserRole.MERCHANT,
+      isActive: true,
+      passwordHash: bcrypt.hashSync('merchant123', 12),
+    },
+    create: {
+      phone: testMerchantPhone,
+      email: testMerchantEmail,
+      passwordHash: bcrypt.hashSync('merchant123', 12),
+      role: UserRole.MERCHANT,
+      isActive: true,
+    },
+  });
+
+  await prisma.merchantUser.upsert({
+    where: { userId: testMerchantUser.id },
+    update: { isActive: true },
+    create: {
+      userId: testMerchantUser.id,
+      merchantId: testMerchant.id,
+      role: MerchantUserRole.OWNER,
+      isActive: true,
+    },
+  });
+
+  console.log('✓ Test merchant ready — login: merchant@community.local / merchant123');
+
   for (const item of merchants) {
     const { offer, ...merchantData } = item;
 

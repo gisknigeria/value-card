@@ -15,7 +15,7 @@ async function bootstrap() {
   const allowedOrigins = rawOrigin.split(',').map(o => o.trim()).filter(Boolean);
 
   app.enableCors({
-    origin: (origin, callback) => {
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       // Allow non-browser clients (curl, mobile apps) and listed origins
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
