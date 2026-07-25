@@ -409,6 +409,27 @@ export function acknowledgeWalkIn(token: string, walkInId: string) {
   );
 }
 
+export interface MerchantListItem {
+  id: string;
+  name: string;
+  category: string;
+  location: string;
+}
+
+export function listMerchantsForWalkIn(token: string) {
+  return securityRequest<{ merchants: MerchantListItem[] }>('/api/merchants/list', token);
+}
+
+export function logWalkIn(
+  token: string,
+  input: { guestName: string; guestPhone?: string; merchantId: string; merchantName: string; gate: string; notes?: string },
+) {
+  return securityRequest<{ walkIn: WalkInLog }>('/api/walkin', token, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
 export function listRenewals(token: string, status?: ApprovalStatus | 'ALL', query?: string) {
   const params = new URLSearchParams();
   if (status && status !== 'ALL') params.set('status', status);

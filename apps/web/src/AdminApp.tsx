@@ -4,6 +4,7 @@ import {
   BarChart2,
   BadgeCheck,
   Ban,
+  Bell,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -12,11 +13,15 @@ import {
   ChevronUp,
   Clock3,
   LogOut,
+  MapPin,
   MessageSquare,
+  Phone,
+  RefreshCw,
   Search,
   ShieldCheck,
   Store,
   UserCheck,
+  UserPlus,
   UserX,
   Users,
   XCircle,
@@ -31,6 +36,8 @@ import {
   adminUpdateUserPosition,
   listRenewals,
   processRenewal,
+  listMerchantsForWalkIn,
+  logWalkIn,
   type ApprovalStatus,
   type MerchantProfile,
   type AdminMerchantListResponse,
@@ -40,6 +47,8 @@ import {
   type AdminRole,
   type AdminUserPosition,
   type UserRole,
+  type MerchantListItem,
+  type WalkInLog,
 } from './api';
 import { PagerBar, ResidentDetailModal, ComplaintsPanel, TransactionAuditPanel, AdminReportsPanel } from './AdminPanels';
 
@@ -997,9 +1006,244 @@ function AdminLogin({ onLogin }: { onLogin: (token: string, admin: AdminIdentity
   );
 }
 
+// ── Admin Walk-in Panel ───────────────────────────────────────────────
+
+const GATES = ['Main Gate', 'Awolowo Avenue Gate', 'Housing Road Gate', 'Market Gate'];
+
+function AdminWalkInPanel({ token }: { token: string }) {
+  const [merchants, setMerchants] = useState<MerchantListItem[]>([]);
+  const [loadingMerchants, setLoadingMerchants] = useState(true);
+  const [merchantError, setMerchantError] = useState('');
+
+  const [form, setForm] = useState({ guestName: '', guestPhone: '', merchantId: '', gate: 'Main Gate', notes: '' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<{ guestName: string; destination: string } | null>(null);
+
+  const [recentWalkIns, setRecentWalkIns] = useState<WalkInLog[]>([]);
+  const [loadingRecent, setLoadingRecent] = useState(false);
+
+  const set = (k: keyof typeof form, v: string) => setForm(f => ({ ...f, [k]: v }));
+
+  // Load merchant list from security server
+  useEffect(() => {
+    setLoadingMerchants(true);
+    listMerchantsForWalkIn(token)
+      .then(({ merchants: m }) => setMerchants(m))
+      .catch(() => setMerchantError('Could not load merchants. Check VITE_SECURITY_API_URL is set.'))
+      .finally(() => setLoadingMerchants(false));
+  }, [token]);
+
+  const loadRecent = useCallback(async () => {
+    setLoadingRecent(true);
+    try {
+      const securityUrl = ((import.meta as any).env?.VITE_SECURITY_API_URL || '').replace(/\/$/, '');
+      const res = await fetch(`${securityUrl}/api/walkin`, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRecentWalkIns((data.walkIns ?? []).slice(0, 20));
+      }
+    } catch { /* non-critical */ }
+    finally { setLoadingRecent(false); }
+  }, [token]);
+
+  useEffect(() => { void loadRecent(); }, [loadRecent]);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.guestName.trim() || !form.merchantId) { setError('Guest name and destination are required.'); return; }
+    setBusy(true); setError(''); setResult(null);
+    const merchant = merchants.find(m => m.id === form.merchantId);
+    try {
+      await logWalkIn(token, {
+        guestName: form.guestName.trim(),
+        guestPhone: form.guestPhone.trim() || undefined,
+        merchantId: form.merchantId,
+        merchantName: merchant?.name ?? 'Unknown',
+        gate: form.gate,
+        notes: form.notes.trim() || undefined,
+      });
+      setResult({ guestName: form.guestName.trim(), destination: merchant?.name ?? 'Unknown' });
+      setForm(f => ({ ...f, guestName: '', guestPhone: '', notes: '' }));
+      void loadRecent();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to log walk-in.');
+    } finally { setBusy(false); }
+  };
+
+  const fmt = (iso: string) =>
+    new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }).format(new Date(iso));
+
+  return (
+    <section style={{ marginTop: 24 }}>
+      <div style={{ marginBottom: 20 }}>
+        <h3 style={{ fontSize: 16, margin: 0 }}>Log walk-in guest</h3>
+        <p style={{ color: 'var(--muted)', fontSize: 12, margin: '4px 0 0' }}>
+          Log a visitor heading to a merchant. The merchant will be notified and must acknowledge before the guest can exit.
+        </p>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+
+        {/* ── Log form ── */}
+        <div className="admin-workspace" style={{ padding: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+            <UserPlus size={18} style={{ color: '#c6974c' }} />
+            <strong style={{ fontSize: 14 }}>New walk-in</strong>
+          </div>
+
+          {merchantError && <div className="auth-error" style={{ marginBottom: 12 }}>{merchantError}</div>}
+
+          {result && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: '12px 14px', marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#166534', fontWeight: 600, fontSize: 13 }}>
+                <CheckCircle2 size={16} /> Logged successfully
+              </div>
+              <p style={{ margin: '4px 0 0', fontSize: 12, color: '#166534' }}>
+                {result.guestName} is heading to {result.destination}. Merchant has been notified.
+              </p>
+            </div>
+          )}
+
+          {error && <div className="auth-error" style={{ marginBottom: 12 }}>{error}</div>}
+
+          <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+              <span>Guest full name <span style={{ color: '#ef4444' }}>*</span></span>
+              <div className="auth-input">
+                <UserPlus size={16} />
+                <input
+                  required
+                  value={form.guestName}
+                  onChange={e => set('guestName', e.target.value)}
+                  placeholder="e.g. Ade Balogun"
+                  maxLength={120}
+                />
+              </div>
+            </label>
+
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+              <span>Guest phone <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(optional)</span></span>
+              <div className="auth-input">
+                <Phone size={16} />
+                <input
+                  value={form.guestPhone}
+                  onChange={e => set('guestPhone', e.target.value)}
+                  placeholder="0803 000 0000"
+                  maxLength={30}
+                />
+              </div>
+            </label>
+
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+              <span>Destination merchant <span style={{ color: '#ef4444' }}>*</span></span>
+              <select
+                required
+                value={form.merchantId}
+                onChange={e => set('merchantId', e.target.value)}
+                style={{ padding: '9px 12px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 13, background: 'var(--surface)' }}
+                disabled={loadingMerchants}
+              >
+                <option value="">{loadingMerchants ? 'Loading merchants…' : 'Select merchant'}</option>
+                {merchants.map(m => (
+                  <option key={m.id} value={m.id}>{m.name} — {m.category}</option>
+                ))}
+              </select>
+            </label>
+
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+              <span>Gate</span>
+              <select
+                value={form.gate}
+                onChange={e => set('gate', e.target.value)}
+                style={{ padding: '9px 12px', borderRadius: 8, border: '1px solid var(--line)', fontSize: 13, background: 'var(--surface)' }}
+              >
+                {GATES.map(g => <option key={g}>{g}</option>)}
+              </select>
+            </label>
+
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+              <span>Notes <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(optional)</span></span>
+              <div className="auth-input">
+                <MapPin size={16} />
+                <input
+                  value={form.notes}
+                  onChange={e => set('notes', e.target.value)}
+                  placeholder="Any notes about the visit"
+                  maxLength={300}
+                />
+              </div>
+            </label>
+
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={busy || loadingMerchants}
+              style={{ marginTop: 4 }}
+            >
+              <UserPlus size={15} />
+              {busy ? 'Logging…' : 'Log walk-in & notify merchant'}
+            </button>
+          </form>
+        </div>
+
+        {/* ── Recent walk-ins ── */}
+        <div className="admin-workspace">
+          <div className="admin-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Bell size={15} />
+              <strong style={{ fontSize: 13 }}>Active walk-ins</strong>
+            </div>
+            <button className="secondary-button" style={{ fontSize: 11, minHeight: 28 }} onClick={loadRecent} disabled={loadingRecent}>
+              <RefreshCw size={12} /> Refresh
+            </button>
+          </div>
+
+          {loadingRecent && <p style={{ color: 'var(--muted)', fontSize: 13, padding: '12px 16px' }}>Loading…</p>}
+
+          {!loadingRecent && recentWalkIns.length === 0 && (
+            <div style={{ padding: '24px 16px', textAlign: 'center' }}>
+              <Bell size={24} style={{ color: 'var(--muted)', margin: '0 auto 8px', display: 'block' }} />
+              <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>No active walk-ins right now.</p>
+            </div>
+          )}
+
+          {recentWalkIns.map(w => (
+            <div key={w.id} style={{ padding: '12px 16px', borderTop: '1px solid var(--line)', fontSize: 13 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <strong>{w.guestName}</strong>
+                  {w.guestPhone && <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 6 }}>{w.guestPhone}</span>}
+                  <p style={{ fontSize: 11, color: 'var(--muted)', margin: '2px 0 0' }}>
+                    → {w.merchantName} · {w.gate} · {fmt(w.entryTime)}
+                  </p>
+                </div>
+                <span style={{
+                  fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 12,
+                  background: w.exitTime ? '#f0fdf4' : w.acknowledged ? '#eff6ff' : '#fef2f2',
+                  color: w.exitTime ? '#166534' : w.acknowledged ? '#1d4ed8' : '#dc2626',
+                }}>
+                  {w.exitTime ? 'EXITED' : w.acknowledged ? 'INSIDE' : 'PENDING'}
+                </span>
+              </div>
+              {w.acknowledged && !w.exitTime && w.exitCode && (
+                <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--muted)' }}>
+                  Exit code: <strong style={{ fontFamily: 'monospace', letterSpacing: 2, color: '#1a5c3a' }}>{w.exitCode}</strong>
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ── Admin dashboard ───────────────────────────────────────────────────
 
-type AdminSection = 'residents' | 'dependants' | 'positions' | 'renewals' | 'merchants' | 'offers' | 'complaints' | 'transactions' | 'reports';
+type AdminSection = 'residents' | 'dependants' | 'positions' | 'renewals' | 'merchants' | 'offers' | 'complaints' | 'transactions' | 'reports' | 'walkins';
 
 function AdminDashboard({ token, admin, logout }: { token: string; admin: AdminIdentity; logout: () => void }) {
   const [section, setSection] = useState<AdminSection>('residents');
@@ -1080,6 +1324,9 @@ function AdminDashboard({ token, admin, logout }: { token: string; admin: AdminI
           <button className={section === 'reports' ? 'active' : ''} onClick={() => setSection('reports')}>
             <BadgeCheck size={16} /> Reports
           </button>
+          <button className={section === 'walkins' ? 'active' : ''} onClick={() => setSection('walkins')}>
+            <Bell size={16} /> Walk-ins
+          </button>
         </div>
 
         {section === 'residents'    && <ResidentsPanel token={token} />}
@@ -1091,6 +1338,7 @@ function AdminDashboard({ token, admin, logout }: { token: string; admin: AdminI
         {section === 'complaints'   && <ComplaintsPanel token={token} />}
         {section === 'transactions' && <TransactionAuditPanel token={token} />}
         {section === 'reports'      && <AdminReportsPanel token={token} />}
+        {section === 'walkins'      && <AdminWalkInPanel token={token} />}
       </main>
     </div>
   );

@@ -71,6 +71,10 @@ import {
   MdQrCodeScanner,
   MdPolyline,
   MdHexagon,
+  MdPersonAdd,
+  MdClose,
+  MdNote,
+  MdWifiOff,
   MdImage,
   MdFilterHdr,
   MdCropSquare,
@@ -3758,6 +3762,8 @@ function Dashboard({ session, onLogout }) {
   const [cameras, setCameras] = useState([]);
   const [cameraPanel, setCameraPanel] = useState(false);
   const [accessPanel, setAccessPanel] = useState(false);
+  const [walkInPanel, setWalkInPanel] = useState(false);
+  const [walkInMerchants, setWalkInMerchants] = useState([]);
   const [phoneShares, setPhoneShares] = useState([]);
   const [remoteStreams, setRemoteStreams] = useState({});
   const [sharingCamera, setSharingCamera] = useState(false);
@@ -5435,6 +5441,23 @@ function Dashboard({ session, onLogout }) {
               <button onClick={() => setAccessPanel(true)}>
                 <MdQrCodeScanner /> Gate Scan
               </button>
+              {canAdmin && (
+                <button
+                  className="amber"
+                  onClick={() => {
+                    setWalkInPanel(true);
+                    // Load merchant list fresh each time panel opens
+                    fetch("/api/merchants/list", {
+                      headers: { Authorization: `Bearer ${session.token}`, "Content-Type": "application/json" },
+                    })
+                      .then(r => r.json())
+                      .then(d => setWalkInMerchants(d.merchants || []))
+                      .catch(() => {});
+                  }}
+                >
+                  <MdPersonAdd /> Walk-in
+                </button>
+              )}
               <button
                 onClick={() => {
                   setToolsOpen((value) => !value);
@@ -6181,6 +6204,13 @@ function Dashboard({ session, onLogout }) {
           onClose={() => setAccessPanel(false)}
         />
       )}
+      {walkInPanel && (
+        <AdminWalkInModal
+          session={session}
+          merchants={walkInMerchants}
+          onClose={() => setWalkInPanel(false)}
+        />
+      )}
       {cameraPanel && (
         <CameraPanel
           cameras={cameras}
@@ -6223,6 +6253,139 @@ function Dashboard({ session, onLogout }) {
       {/* Toast — only shown for errors and emergency alerts */}
       {notice && <div className="toast">{notice}</div>}
     </main>
+  );
+}
+
+// ── AdminWalkInModal — walk-in logger for Admin / Super Admin ─────────────
+
+function AdminWalkInModal({ session, merchants, onClose }) {
+  const [gate, setGate] = useState(session.user.unit || "Main Gate");
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [form, setForm] = useState({ guestName: "", guestPhone: "", merchantId: "", notes: "" });
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+
+  const headers = { Authorization: `Bearer ${session.token}`, "Content-Type": "application/json" };
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    const on = () => setIsOnline(true);
+    const off = () => setIsOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+  }, []);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!form.guestName.trim() || !form.merchantId) { setError("Guest name and destination are required."); return; }
+    if (!isOnline) { setError("Offline — cannot log walk-in."); return; }
+    setBusy(true); setError(""); setResult(null);
+    const merchant = merchants.find(m => m.id === form.merchantId);
+    try {
+      const r = await fetch("/api/walkin", {
+        method: "POST", headers,
+        body: JSON.stringify({
+          guestName: form.guestName.trim(),
+          guestPhone: form.guestPhone.trim() || undefined,
+          merchantId: form.merchantId,
+          merchantName: merchant?.name || "Unknown",
+          gate,
+          notes: form.notes.trim() || undefined,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) { setError(d.message || "Failed to log walk-in."); return; }
+      setResult({ guestName: form.guestName.trim(), destination: merchant?.name });
+      setForm({ guestName: "", guestPhone: "", merchantId: "", notes: "" });
+    } catch { setError("Network error — could not log walk-in."); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="access-modal-backdrop">
+      <section className="access-modal" aria-label="Log walk-in guest" style={{ maxWidth: 520 }}>
+        <header className="access-head">
+          <div>
+            <span className="eyebrow">BODIJA GATE</span>
+            <h2><MdPersonAdd /> Log walk-in guest</h2>
+            <p>Log a visitor heading to a merchant. The destination will be notified and must acknowledge before the guest can exit.</p>
+          </div>
+          <button className="access-close" onClick={onClose} aria-label="Close"><MdClose /></button>
+        </header>
+
+        <div className="access-body" style={{ display: "block", padding: "0 24px 24px" }}>
+          {!isOnline && (
+            <div className="access-offline-banner" role="alert">
+              <MdWifiOff /> Device is offline — cannot log walk-in.
+            </div>
+          )}
+
+          {result && (
+            <div className="ap-result allowed" style={{ marginBottom: 16 }}>
+              <div className="ap-result-head">
+                <span>LOGGED</span>
+                <strong>{result.guestName} is heading to {result.destination}</strong>
+              </div>
+              <p style={{ margin: "8px 14px", fontSize: 12, color: "#9ca3af" }}>
+                The merchant has been notified. Guest can enter. They will need an exit code from the merchant to leave.
+              </p>
+            </div>
+          )}
+
+          {error && <div className="ap-error" style={{ marginBottom: 12 }}>{error}</div>}
+
+          <form onSubmit={submit} className="ap-walkin-form" style={{ marginTop: 12 }}>
+            <label className="ap-field">
+              Guest full name *
+              <div className="ap-input-row">
+                <MdPersonAdd />
+                <input required value={form.guestName} onChange={e => set("guestName", e.target.value)} placeholder="e.g. Aisha Musa" />
+              </div>
+            </label>
+
+            <label className="ap-field">
+              Guest phone <span style={{ fontWeight: 400, color: "#9ca3af" }}>(optional)</span>
+              <div className="ap-input-row">
+                <MdNote />
+                <input value={form.guestPhone} onChange={e => set("guestPhone", e.target.value)} placeholder="e.g. 0803 000 0000" />
+              </div>
+            </label>
+
+            <label className="ap-field">
+              Going to *
+              <select required value={form.merchantId} onChange={e => set("merchantId", e.target.value)} className="ap-select">
+                <option value="">— Select merchant / business —</option>
+                {merchants.map(m => <option key={m.id} value={m.id}>{m.name} — {m.location}</option>)}
+              </select>
+            </label>
+
+            <label className="ap-field">
+              Gate
+              <select value={gate} onChange={e => setGate(e.target.value)} className="ap-select">
+                <option>Main Gate</option>
+                <option>Awolowo Avenue Gate</option>
+                <option>Housing Road Gate</option>
+                <option>Market Gate</option>
+              </select>
+            </label>
+
+            <label className="ap-field">
+              Notes <span style={{ fontWeight: 400, color: "#9ca3af" }}>(optional)</span>
+              <div className="ap-input-row">
+                <MdNote />
+                <input value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="e.g. Delivery, appointment" maxLength={300} />
+              </div>
+            </label>
+
+            <button type="submit" className="ap-verify-btn amber" disabled={busy || !isOnline}>
+              <MdPersonAdd /> {busy ? "Logging…" : "Log walk-in & notify merchant"}
+            </button>
+          </form>
+        </div>
+      </section>
+    </div>
   );
 }
 
