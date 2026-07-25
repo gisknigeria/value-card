@@ -1693,57 +1693,42 @@ function OfficerManager({
   onDelete,
   onPassword,
 }) {
-  const manageableRanks = ["Super Admin", "Admin"].includes(currentUser.role)
-    ? POLICE_RANK_GROUPS.flatMap((group) => group.ranks)
-    : ranksBelow(currentUser.rank);
-  const defaultRank = manageableRanks[0] || "";
-  const defaultCommand = OYO_COMMANDS[0] || "";
-  const defaultDivision = divisionsForCommand(defaultCommand)[0];
+  const [tab, setTab] = useState("list"); // "list" | "create"
   const emptyForm = {
     name: "",
     email: "",
     password: "",
-    rank: defaultRank,
-    unit: defaultDivision?.name || "",
-    unitType: "Division",
-    command: defaultCommand,
-    division: defaultDivision?.name || "",
+    role: "Access Point",
+    rank: "Access Point",
+    unit: "Bodija Gate",
+    unitType: "Gate",
+    command: "Bodija Community",
+    division: "",
     station: "",
-    lga: defaultDivision?.lga || "",
+    lga: "",
     lat: "7.3775",
     lng: "3.9470",
-    role: "Officer",
   };
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState("");
-  // ── Password reset state ──────────────────────────────────────────────
-  const [resetTarget, setResetTarget] = useState(null); // user object
+  const [showPw, setShowPw] = useState(false);
+  const [success, setSuccess] = useState("");
+
+  // ── Password reset state ───────────────────────────────────────────────
+  const [resetTarget, setResetTarget] = useState(null);
   const [resetPw, setResetPw] = useState("");
   const [resetShowPw, setResetShowPw] = useState(false);
   const [resetError, setResetError] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
 
-  const commandDivisions = divisionsForCommand(form.command);
-  const pickCommand = (command) => {
-    const first = divisionsForCommand(command)[0];
-    setForm({
-      ...form,
-      command,
-      division: first?.name || "",
-      lga: first?.lga || "",
-      unit: first?.name || command,
-    });
-  };
-  const pickDivision = (name) => {
-    const found = commandDivisions.find((item) => item.name === name);
-    setForm({ ...form, division: name, lga: found?.lga || "", unit: name });
-  };
   const submit = async (e) => {
     e.preventDefault();
-    setError("");
+    setError(""); setSuccess("");
     try {
-      await onCreate(form);
+      await onCreate({ ...form, rank: form.role });
       setForm(emptyForm);
+      setSuccess("Account created successfully.");
+      setTab("list");
     } catch (err) {
       setError(err.message);
     }
@@ -1761,13 +1746,21 @@ function OfficerManager({
     } finally { setResetLoading(false); }
   };
 
+  const roleLabel = (role) =>
+    role === "Super Admin"  ? "System Administrator"
+    : role === "Admin"      ? "Control Room Admin"
+    : role === "Access Point" ? "Access Point Officer"
+    : role;
+
   const canManageRoles = currentUser.role === "Super Admin";
+  const manageable = users.filter((o) => o.role !== "Super Admin");
+
   return (
     <div className="modal-backdrop">
       {/* ── Password reset overlay ─────────────────────────────────────── */}
       {resetTarget && (
         <div className="modal-backdrop" style={{ zIndex: 2100 }}>
-          <section className="modal" style={{ maxWidth: 380 }}>
+          <section className="modal" style={{ maxWidth: 360 }}>
             <div className="panel-title">
               <div>
                 <span className="eyebrow">SECURITY</span>
@@ -1785,8 +1778,7 @@ function OfficerManager({
                 New password
                 <div className="password-wrap">
                   <input
-                    required
-                    minLength={6}
+                    required minLength={6}
                     type={resetShowPw ? "text" : "password"}
                     value={resetPw}
                     onChange={e => setResetPw(e.target.value)}
@@ -1800,9 +1792,7 @@ function OfficerManager({
               </label>
               {resetError && <div className="error">{resetError}</div>}
               <div className="actions">
-                <button type="button" className="ghost" onClick={() => { setResetTarget(null); setResetPw(""); setResetError(""); }}>
-                  Cancel
-                </button>
+                <button type="button" className="ghost" onClick={() => { setResetTarget(null); setResetPw(""); setResetError(""); }}>Cancel</button>
                 <button type="submit" className="primary" disabled={resetLoading}>
                   {resetLoading ? "Saving…" : "Set password"}
                 </button>
@@ -1813,217 +1803,128 @@ function OfficerManager({
       )}
 
       <section className="modal officer-modal">
+        {/* ── Header ── */}
         <div className="panel-title">
           <div>
-            <span className="eyebrow">ONBOARDING</span>
-            <h2>Manage personnel</h2>
+            <span className="eyebrow">PERSONNEL</span>
+            <h2>Manage accounts</h2>
           </div>
-          <button className="icon-btn" onClick={onClose}>
-            <FaTimes />
+          <button className="icon-btn" onClick={onClose}><FaTimes /></button>
+        </div>
+
+        {/* ── Tabs ── */}
+        <div className="om-tabs">
+          <button
+            className={tab === "list" ? "active" : ""}
+            onClick={() => setTab("list")}
+          >
+            Accounts
+            {manageable.length > 0 && (
+              <span className="om-count">{manageable.length}</span>
+            )}
+          </button>
+          <button
+            className={tab === "create" ? "active" : ""}
+            onClick={() => { setTab("create"); setError(""); setSuccess(""); }}
+          >
+            + Create account
           </button>
         </div>
-        <div className="manager-grid">
-          <div className="manage-list">
-            <h3>Visible lower ranks</h3>
-            {users
-              .filter((o) => o.role !== "Super Admin")
-              .map((o) => (
-              <div className="manage-row" key={o.id}>
-                <div className="avatar">
-                  {o.name
-                    .split(" ")
-                    .map((x) => x[0])
-                    .join("")
-                    .slice(0, 2)}
+
+        {/* ── Accounts list ── */}
+        {tab === "list" && (
+          <div className="om-panel">
+            {success && (
+              <div className="om-success">{success}</div>
+            )}
+            {manageable.length === 0 && (
+              <div className="om-empty">No accounts yet. Use the Create account tab to add one.</div>
+            )}
+            {manageable.map((o) => (
+              <div className="om-row" key={o.id}>
+                <div className="om-avatar">
+                  {o.name.split(" ").map((x) => x[0]).join("").slice(0, 2).toUpperCase()}
                 </div>
-                <div>
-                  <b>{o.rank ? `${o.rank} ${o.name}` : o.name}</b>
-                  <small>
-                    {o.role === "Admin"
-                      ? "Control Room Admin"
-                      : o.role === "Super Admin"
-                        ? "System Administrator"
-                        : o.role} -{" "}
-                    {o.email} - {o.unitType || "Division"} -{" "}
-                    {o.command || "No command"} -{" "}
-                    {o.station || o.division || o.unit}
-                  </small>
+                <div className="om-info">
+                  <b>{o.name}</b>
+                  <small>{roleLabel(o.role)}</small>
+                  <small className="om-email">{o.email}</small>
                 </div>
-                <button
-                  className="unit-action-btn"
-                  onClick={() => { setResetTarget(o); setResetPw(""); setResetError(""); }}
-                >
-                  Password
-                </button>
-                <button className="delete-btn" onClick={() => onDelete(o)}>
-                  Delete
-                </button>
+                <div className="om-actions">
+                  <button
+                    className="unit-action-btn"
+                    onClick={() => { setResetTarget(o); setResetPw(""); setResetError(""); }}
+                  >
+                    Password
+                  </button>
+                  <button className="delete-btn" onClick={() => onDelete(o)}>
+                    Delete
+                  </button>
+                </div>
               </div>
             ))}
           </div>
-          <form onSubmit={submit}>
-            <h3>Create lower-rank account</h3>
-            <label>
-              Full name
-              <input
-                required
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="Officer name"
-              />
-            </label>
-            <label>
-              Rank
-              <select
-                required
-                value={form.rank}
-                onChange={(e) => setForm({ ...form, rank: e.target.value })}
-              >
-                {POLICE_RANK_GROUPS.map((group) => (
-                  <optgroup key={group.name} label={group.name}>
-                    {group.ranks
-                      .filter((rank) => manageableRanks.includes(rank))
-                      .map((rank) => (
-                        <option key={rank}>{rank}</option>
-                      ))}
-                  </optgroup>
-                ))}
-              </select>
-            </label>
-            <label>
-              Email
-              <input
-                required
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="name@command.local"
-              />
-            </label>
-            {canManageRoles && (
+        )}
+
+        {/* ── Create form ── */}
+        {tab === "create" && (
+          <div className="om-panel">
+            <form onSubmit={submit} className="om-form">
               <label>
-                System role
-                <select
-                  value={form.role}
-                  onChange={(e) => setForm({ ...form, role: e.target.value })}
-                >
-                  <option>Officer</option>
-                  <option value="Access Point">Access Point</option>
-                  <option value="Admin">Control Room Admin</option>
-                </select>
-              </label>
-            )}
-            <div className="two-col">
-              <label>
-                Unit type
-                <select
-                  required
-                  value={form.unitType}
-                  onChange={(e) =>
-                    setForm({ ...form, unitType: e.target.value })
-                  }
-                >
-                  {UNIT_TYPES.map((type) => (
-                    <option key={type}>{type}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Area command
-                <select
-                  required
-                  value={form.command}
-                  onChange={(e) => pickCommand(e.target.value)}
-                >
-                  {OYO_COMMANDS.map((command) => (
-                    <option key={command}>{command}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="two-col">
-              <label>
-                Division
-                <select
-                  required
-                  value={form.division}
-                  onChange={(e) => pickDivision(e.target.value)}
-                >
-                  {commandDivisions.map((item) => (
-                    <option key={item.name}>{item.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Station / unit name
-                <input
-                  value={form.station}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      station: e.target.value,
-                      unit: e.target.value || form.division,
-                    })
-                  }
-                  placeholder="HQTS, station or special unit"
-                />
-              </label>
-            </div>
-            <div className="two-col">
-              <label>
-                LGA
+                Full name
                 <input
                   required
-                  value={form.lga}
-                  onChange={(e) => setForm({ ...form, lga: e.target.value })}
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="e.g. Biodun Adeyemi"
                 />
               </label>
+
               <label>
-                Unit / call sign
+                Email address
                 <input
                   required
-                  value={form.unit}
-                  onChange={(e) => setForm({ ...form, unit: e.target.value })}
-                  placeholder="Patrol 04"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="name@bodija.local"
                 />
               </label>
-            </div>
-            <div className="two-col">
+
+              {canManageRoles && (
+                <label>
+                  Role
+                  <select
+                    value={form.role}
+                    onChange={(e) => setForm({ ...form, role: e.target.value, rank: e.target.value })}
+                  >
+                    <option value="Access Point">Access Point Officer</option>
+                    <option value="Admin">Control Room Admin</option>
+                  </select>
+                </label>
+              )}
+
               <label>
                 Password
-                <input
-                  required
-                  minLength="6"
-                  type="password"
-                  value={form.password}
-                  onChange={(e) =>
-                    setForm({ ...form, password: e.target.value })
-                  }
-                />
+                <div className="password-wrap">
+                  <input
+                    required minLength={6}
+                    type={showPw ? "text" : "password"}
+                    value={form.password}
+                    onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    placeholder="At least 6 characters"
+                  />
+                  <button type="button" className="password-toggle" onClick={() => setShowPw(v => !v)}>
+                    {showPw ? <FaEyeSlash size={14} /> : <FaEye size={14} />}
+                  </button>
+                </div>
               </label>
-              <label>
-                Initial latitude
-                <input
-                  required
-                  value={form.lat}
-                  onChange={(e) => setForm({ ...form, lat: e.target.value })}
-                />
-              </label>
-            </div>
-            <label>
-              Initial longitude
-              <input
-                required
-                value={form.lng}
-                onChange={(e) => setForm({ ...form, lng: e.target.value })}
-              />
-            </label>
-            {error && <div className="error">{error}</div>}
-            <button className="primary wide" disabled={!manageableRanks.length}>
-              Create account
-            </button>
-          </form>
-        </div>
+
+              {error && <div className="error">{error}</div>}
+              <button type="submit" className="primary wide">Create account</button>
+            </form>
+          </div>
+        )}
       </section>
     </div>
   );
@@ -3877,14 +3778,12 @@ function Dashboard({ session, onLogout }) {
     [users, gpsPositions],
   );
   const canAdmin =
-    ["Admin", "Super Admin"].includes(session.user.role) ||
-    session.user.rank === "Commissioner of Police (CP)";
+    ["Admin", "Super Admin"].includes(session.user.role);
   const canCreateCustomReportType = ["Admin", "Super Admin"].includes(
     session.user.role,
   );
   const canManagePersonnel =
-    ["Super Admin", "Admin"].includes(session.user.role) ||
-    ranksBelow(session.user.rank).length > 0;
+    ["Super Admin", "Admin"].includes(session.user.role);
   const canSeeReport = (item) =>
     canAdmin ||
     item.createdBy === session.user.id ||
@@ -5417,7 +5316,9 @@ function Dashboard({ session, onLogout }) {
                 ? "Control Room Admin"
                 : session.user.role === "Super Admin"
                   ? "System Administrator"
-                  : session.user.role}
+                  : session.user.role === "Access Point"
+                    ? "Access Point Officer"
+                    : session.user.role}
             </small>
           </div>
         </div>

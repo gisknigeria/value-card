@@ -438,25 +438,28 @@ const activeCameraShares = new Map();
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
 const auth = (req, res, next) => { try { req.user = jwt.verify((req.headers.authorization || '').replace('Bearer ', ''), secret); next(); } catch { res.status(401).json({ message: 'Session expired. Please sign in again.' }); } };
-const isAdminRole = user => ['Admin', 'Super Admin'].includes(user?.role) || user?.rank === 'Commissioner of Police (CP)';
+const isAdminRole = user => ['Admin', 'Super Admin'].includes(user?.role);
 const adminOnly = (req, res, next) => isAdminRole(req.user) ? next() : res.status(403).json({ message: 'Admin access required' });
 const superAdminOnly = (req, res, next) => req.user.role === 'Super Admin' ? next() : res.status(403).json({ message: 'System administrator access required' });
-const canManageUsers = user => user?.role === 'Super Admin' || user?.role === 'Admin' || ranksBelow(user?.rank).length > 0;
+const canManageUsers = user => user?.role === 'Super Admin' || user?.role === 'Admin';
 const visibleUsersFor = (viewer, users) => {
-  const visibleUsers = users.filter(user => user.id !== viewer.id && (viewer.role === 'Super Admin' || user.role !== 'Super Admin'));
-  if (isAdminRole(viewer)) return visibleUsers;
-  return visibleUsers.filter(user => canManageRank(viewer.rank, user.rank));
+  // Super Admin sees everyone except themselves
+  // Admin sees everyone except Super Admin and themselves
+  return users.filter(user =>
+    user.id !== viewer.id &&
+    (viewer.role === 'Super Admin' || user.role !== 'Super Admin')
+  );
 };
 const canCreateUser = (viewer, rank, role) => {
-  if (viewer.role === 'Super Admin') return ['Officer', 'Admin', 'Super Admin', 'Access Point'].includes(role);
-  if (viewer.role === 'Admin') return ['Officer', 'Access Point'].includes(role);
-  return role === 'Officer' && canManageRank(viewer.rank, rank);
+  if (viewer.role === 'Super Admin') return ['Admin', 'Access Point'].includes(role);
+  if (viewer.role === 'Admin') return role === 'Access Point';
+  return false;
 };
 const canDeleteUser = (viewer, target) => {
   if (!target || target.id === viewer.id) return false;
   if (viewer.role === 'Super Admin') return true;
-  if (viewer.role === 'Admin') return target.role !== 'Super Admin' && target.role !== 'Admin';
-  return canManageRank(viewer.rank, target.rank);
+  if (viewer.role === 'Admin') return target.role === 'Access Point';
+  return false;
 };
 const canAccessRoom = (viewer, room) => !!room && (isAdminRole(viewer) || room.members?.includes(viewer.id));
 const isSosIncident = incident => incident?.reportType === 'SOS-Emergency' || incident?.style?.source === 'sos';
@@ -1072,13 +1075,12 @@ const toWalkIn = row => ({
 });
 
 app.post('/api/users', auth, asyncRoute(async (req, res) => {
-  if (!canManageUsers(req.user)) return res.status(403).json({ message: 'You do not have lower ranks to manage' });
+  if (!canManageUsers(req.user)) return res.status(403).json({ message: 'Access denied' });
   const email = String(req.body.email || '').trim().toLowerCase();
-  const role = req.body.role || 'Officer';
-  const rank = role === 'Access Point' ? 'Access Point' : String(req.body.rank || '').trim();
+  const role = req.body.role || 'Access Point';
+  const rank = role;
   if (!req.body.name || !email || !req.body.password) return res.status(400).json({ message: 'Name, email and password are required' });
-  if (role !== 'Access Point' && !rank) return res.status(400).json({ message: 'Rank is required' });
-  if (!canCreateUser(req.user, rank, role)) return res.status(403).json({ message: 'You can only create accounts below your rank' });
+  if (!canCreateUser(req.user, rank, role)) return res.status(403).json({ message: 'You do not have permission to create that role' });
   if ((await store.users()).some(user => user.email.toLowerCase() === email)) return res.status(409).json({ message: 'An account with that email already exists' });
   const user = {
     id: `u${Date.now()}`,
@@ -1086,14 +1088,14 @@ app.post('/api/users', auth, asyncRoute(async (req, res) => {
     password: await bcrypt.hash(req.body.password, 10),
     role, rank,
     active: true,
-    unit: req.body.unit || (role === 'Access Point' ? 'Gate' : 'Field Unit'),
-    unitType: String(req.body.unitType || 'Division').trim(),
-    command: String(req.body.command || '').trim(),
-    division: String(req.body.division || '').trim(),
-    station: String(req.body.station || '').trim(),
-    lga: String(req.body.lga || '').trim(),
-    lat: Number(req.body.lat) || 7.3775,
-    lng: Number(req.body.lng) || 3.9470
+    unit: 'Bodija Gate',
+    unitType: 'Gate',
+    command: 'Bodija Community',
+    division: '',
+    station: '',
+    lga: '',
+    lat: 7.3775,
+    lng: 3.9470,
   };
   const created = await store.createUser(user);
   io.emit('user:created', publicUser(created));

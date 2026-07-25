@@ -1,9 +1,212 @@
-.unit-actions{display:flex;align-items:center;gap:8px}.unit-actions button{border:1px solid #4a6a28;background:#1e3610;color:#a8c878;border-radius:4px;padding:4px 7px;font-size:8px}.map-tools button.active{border-color:#c6974c;background:#2a2010;color:#e4c882;box-shadow:0 0 18px #c6974c44}.map-tools .danger-tool{color:#ff9b9b;border-color:#713c46}.officer-modal{width:min(900px,94vw);max-height:90vh;overflow:auto}.manager-grid{display:grid;grid-template-columns:1fr 1.15fr;gap:30px;margin-top:18px}.manager-grid h3{font-size:12px;color:#a0b490;margin:0 0 12px}.manage-list{border-right:1px solid #253320;padding-right:25px}.manage-row{display:flex;align-items:center;gap:10px;border-top:1px solid #1e2c18;padding:12px 0}.manage-row .avatar{width:32px;height:32px;display:grid;place-items:center;border-radius:50%;background:#1e3a10;color:#8ad068;font-size:9px}.manage-row>div:nth-child(2){min-width:0;flex:1}.manage-row b,.manage-row small{display:block}.manage-row b{font-size:11px}.manage-row small{color:#6a7d5e;font-size:8px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.delete-btn{border:1px solid #63323b;background:#28151b;color:#ff929f;border-radius:4px;padding:5px 7px;font-size:8px}@media(max-width:700px){.manager-grid{grid-template-columns:1fr}.manage-list{border-right:0;border-bottom:1px solid #253320;padding:0 0 18px}}
+.unit-actions { display: flex; align-items: center; gap: 8px; }
+.unit-actions button { border: 1px solid #4a6a28; background: #1e3610; color: #a8c878; border-radius: 4px; padding: 4px 7px; font-size: 9px; }
 
-@media(max-width:760px){
-  .officer-modal{width:100%;max-height:92dvh}
-  .manager-grid{grid-template-columns:1fr;gap:18px}
-  .manage-list{border-right:0;border-bottom:1px solid #253320;padding:0 0 16px}
-  .manage-row{gap:8px}
-  .unit-actions{flex-wrap:wrap}
+.map-tools button.active { border-color: #c6974c; background: #2a2010; color: #e4c882; box-shadow: 0 0 18px #c6974c44; }
+.map-tools .danger-tool { color: #ff9b9b; border-color: #713c46; }
+
+/* ── Officer / Personnel modal ─────────────────────────────────────────── */
+.officer-modal {
+  width: min(520px, 94vw);
+  max-height: 88vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Tab bar ── */
+.om-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid #253320;
+  flex-shrink: 0;
+}
+
+.om-tabs button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #7a9070;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.om-tabs button.active {
+  border-bottom-color: #c6974c;
+  color: #e4c882;
+  background: #18240f;
+}
+
+.om-tabs button:hover:not(.active) {
+  color: #b0c4a0;
+  background: #141d11;
+}
+
+.om-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #2a3a20;
+  color: #c6974c;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+/* ── Panel (scrollable content area) ── */
+.om-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px 24px;
+}
+
+/* ── Account rows ── */
+.om-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid #1e2c18;
+}
+
+.om-row:first-child {
+  border-top: none;
+}
+
+.om-avatar {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #1e3a10;
+  color: #8ad068;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.om-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.om-info b {
+  font-size: 13px;
+  color: #d5e2c8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.om-info small {
+  font-size: 11px;
+  color: #8a9e7c;
+}
+
+.om-info .om-email {
+  font-size: 10px;
+  color: #5e7052;
+}
+
+.om-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.delete-btn {
+  border: 1px solid #63323b;
+  background: #28151b;
+  color: #ff929f;
+  border-radius: 5px;
+  padding: 5px 9px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.delete-btn:hover {
+  background: #3a1e24;
+}
+
+/* ── Success banner ── */
+.om-success {
+  padding: 10px 13px;
+  border-left: 3px solid #3dcb78;
+  border-radius: 0 5px 5px 0;
+  background: #0d1f14;
+  color: #7eeaaa;
+  font-size: 12px;
+  margin-bottom: 14px;
+}
+
+/* ── Empty state ── */
+.om-empty {
+  padding: 32px 0;
+  text-align: center;
+  color: #5e7052;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ── Create form ── */
+.om-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.om-form label {
+  display: grid;
+  gap: 8px;
+  color: #8a9e7c;
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 16px;
+}
+
+.om-form input,
+.om-form select {
+  width: 100%;
+  border: 1px solid #2a3a22;
+  border-radius: 7px;
+  background: #0d1509;
+  color: #e4edda;
+  padding: 11px 13px;
+  outline: none;
+}
+
+.om-form input:focus,
+.om-form select:focus {
+  border-color: #c6974c;
+}
+
+.om-form .primary {
+  margin-top: 22px;
+  width: 100%;
+}
+
+/* ── Responsive ── */
+@media (max-width: 760px) {
+  .officer-modal {
+    width: 100%;
+    max-height: 92dvh;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .om-panel {
+    padding: 16px 18px 20px;
+  }
 }
