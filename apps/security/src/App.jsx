@@ -1716,6 +1716,13 @@ function OfficerManager({
   };
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState("");
+  // ── Password reset state ──────────────────────────────────────────────
+  const [resetTarget, setResetTarget] = useState(null); // user object
+  const [resetPw, setResetPw] = useState("");
+  const [resetShowPw, setResetShowPw] = useState(false);
+  const [resetError, setResetError] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+
   const commandDivisions = divisionsForCommand(form.command);
   const pickCommand = (command) => {
     const first = divisionsForCommand(command)[0];
@@ -1741,18 +1748,70 @@ function OfficerManager({
       setError(err.message);
     }
   };
-  const resetPassword = async (user) => {
-    const password = window.prompt(`Enter new password for ${user.name}`);
-    if (!password) return;
+
+  const submitReset = async (e) => {
+    e.preventDefault();
+    if (!resetPw.trim() || resetPw.length < 6) { setResetError("Password must be at least 6 characters."); return; }
+    setResetLoading(true); setResetError("");
     try {
-      await onPassword(user, password);
+      await onPassword(resetTarget, resetPw.trim());
+      setResetTarget(null); setResetPw(""); setResetShowPw(false);
     } catch (err) {
-      setError(err.message);
-    }
+      setResetError(err.message);
+    } finally { setResetLoading(false); }
   };
+
   const canManageRoles = currentUser.role === "Super Admin";
   return (
     <div className="modal-backdrop">
+      {/* ── Password reset overlay ─────────────────────────────────────── */}
+      {resetTarget && (
+        <div className="modal-backdrop" style={{ zIndex: 2100 }}>
+          <section className="modal" style={{ maxWidth: 380 }}>
+            <div className="panel-title">
+              <div>
+                <span className="eyebrow">SECURITY</span>
+                <h2>Reset password</h2>
+              </div>
+              <button className="icon-btn" onClick={() => { setResetTarget(null); setResetPw(""); setResetError(""); }}>
+                <FaTimes />
+              </button>
+            </div>
+            <p style={{ fontSize: 12, color: "#8a9e7c", margin: "8px 0 16px" }}>
+              Set a new password for <strong style={{ color: "#d5e2c8" }}>{resetTarget.name}</strong>.
+            </p>
+            <form onSubmit={submitReset}>
+              <label>
+                New password
+                <div className="password-wrap">
+                  <input
+                    required
+                    minLength={6}
+                    type={resetShowPw ? "text" : "password"}
+                    value={resetPw}
+                    onChange={e => setResetPw(e.target.value)}
+                    placeholder="At least 6 characters"
+                    autoFocus
+                  />
+                  <button type="button" className="password-toggle" onClick={() => setResetShowPw(v => !v)}>
+                    {resetShowPw ? <FaEyeSlash size={14} /> : <FaEye size={14} />}
+                  </button>
+                </div>
+              </label>
+              {resetError && <div className="error">{resetError}</div>}
+              <div className="actions">
+                <button type="button" className="ghost" onClick={() => { setResetTarget(null); setResetPw(""); setResetError(""); }}>
+                  Cancel
+                </button>
+                <button type="submit" className="primary" disabled={resetLoading}>
+                  {resetLoading ? "Saving…" : "Set password"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+
       <section className="modal officer-modal">
         <div className="panel-title">
           <div>
@@ -1792,7 +1851,7 @@ function OfficerManager({
                 </div>
                 <button
                   className="unit-action-btn"
-                  onClick={() => resetPassword(o)}
+                  onClick={() => { setResetTarget(o); setResetPw(""); setResetError(""); }}
                 >
                   Password
                 </button>
