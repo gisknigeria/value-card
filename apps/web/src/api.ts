@@ -526,7 +526,19 @@ export interface MerchantUserProfile {
   id: string;
   role: MerchantUserRole;
   isActive: boolean;
-  user: { id: string; phone: string; email: string | null; displayName: string | null };
+  user: {
+    id: string;
+    phone: string;
+    email: string | null;
+    displayName: string | null;
+    accessCard: {
+      cardNumber: string;
+      qrToken: string;
+      status: CardStatus;
+      issuedAt: string;
+      expiresAt: string | null;
+    } | null;
+  };
   merchant: MerchantProfile;
 }
 

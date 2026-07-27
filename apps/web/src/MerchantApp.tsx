@@ -17,6 +17,7 @@ import {
   Phone,
   Play,
   Plus,
+  QrCode,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -28,6 +29,7 @@ import {
   XCircle,
   ZapOff,
 } from 'lucide-react';
+import QRCode from 'react-qr-code';
 import {
   registerMerchant,
   loginMerchant,
@@ -1099,7 +1101,7 @@ function OffersPanel({ token, isApproved }: { token: string; isApproved: boolean
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────
-type MerchantView = 'overview' | 'scan' | 'offers' | 'transactions' | 'reports' | 'walkins' | 'staff' | 'profile';
+type MerchantView = 'overview' | 'card' | 'scan' | 'offers' | 'transactions' | 'reports' | 'walkins' | 'staff' | 'profile';
 
 function MerchantDashboard({ session, logout }: { session: MerchantSession; logout: () => void }) {
   const [view, setView] = useState<MerchantView>('overview');
@@ -1184,25 +1186,28 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
           <button className={view === 'overview' ? 'active' : ''} onClick={() => setView('overview')}>
             <Store size={16} /> Overview
           </button>
-          {isApproved && (
+          <button className={view === 'card' ? 'active' : ''} onClick={() => setView('card')}>
+            <QrCode size={16} /> My card
+          </button>
+          {isOwner && isApproved && (
             <button className={view === 'scan' ? 'active' : ''} onClick={() => setView('scan')}>
               <ShieldCheck size={16} /> Scan & log
             </button>
           )}
-          <button className={view === 'offers' ? 'active' : ''} onClick={() => setView('offers')}>
+          {isOwner && <button className={view === 'offers' ? 'active' : ''} onClick={() => setView('offers')}>
             <Tag size={16} /> Offers
-          </button>
-          {isApproved && (
+          </button>}
+          {isOwner && isApproved && (
             <button className={view === 'transactions' ? 'active' : ''} onClick={() => setView('transactions')}>
               <RefreshCw size={16} /> Transactions
             </button>
           )}
-          {isApproved && (
+          {isOwner && isApproved && (
             <button className={view === 'reports' ? 'active' : ''} onClick={() => setView('reports')}>
               <BarChart2 size={16} /> Reports
             </button>
           )}
-          {isApproved && (
+          {isOwner && isApproved && (
             <button
               className={view === 'walkins' ? 'active' : ''}
               onClick={() => { setView('walkins'); setPendingWalkIns(0); }}
@@ -1216,15 +1221,16 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
               )}
             </button>
           )}
-          <button className={view === 'staff' ? 'active' : ''} onClick={() => setView('staff')}>
+          {isOwner && <button className={view === 'staff' ? 'active' : ''} onClick={() => setView('staff')}>
             <Users size={16} /> Staff
-          </button>
+          </button>}
           <button className={view === 'profile' ? 'active' : ''} onClick={() => setView('profile')}>
             <UserRound size={16} /> Profile
           </button>
         </div>
 
-        {view === 'overview'     && <MerchantOverview m={m} isApproved={isApproved} setView={setView} pendingWalkIns={pendingWalkIns} />}
+        {view === 'overview'     && <MerchantOverview m={m} isApproved={isApproved} isOwner={isOwner} setView={setView} pendingWalkIns={pendingWalkIns} />}
+        {view === 'card'         && <RoleAccessCard mu={mu} />}
         {view === 'scan'         && <ScanPanel token={session.accessToken} offers={offers} />}
         {view === 'offers'       && <OffersPanel token={session.accessToken} isApproved={isApproved} />}
         {view === 'transactions' && <TransactionsPanel token={session.accessToken} />}
@@ -1237,15 +1243,57 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
   );
 }
 
+function RoleAccessCard({ mu }: { mu: MerchantUserProfile }) {
+  const card = mu.user.accessCard;
+  const name = mu.user.displayName || (mu.role === 'OWNER' ? mu.merchant.contactPerson : 'Merchant staff');
+  return (
+    <section className="admin-workspace" style={{ marginTop: 24, padding: 24, maxWidth: 560 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div>
+          <small style={{ color: 'var(--muted)', fontWeight: 800 }}>BODIJA ENTRY CARD</small>
+          <h2 style={{ margin: '8px 0 4px' }}>{name}</h2>
+          <p style={{ margin: 0, color: 'var(--muted)' }}>
+            Merchant {mu.role === 'OWNER' ? 'owner' : 'staff'} · {mu.merchant.businessName}
+          </p>
+          <strong style={{ display: 'block', marginTop: 18 }}>{card?.cardNumber || 'Card being issued'}</strong>
+          <span className={`dependant-status-badge ${card?.status === 'ACTIVE' ? 'status-approved' : 'status-pending'}`} style={{ marginTop: 8 }}>
+            {card?.status?.toLowerCase().replace(/_/g, ' ') || 'pending'}
+          </span>
+        </div>
+        <div style={{ background: '#fff', borderRadius: 16, padding: 14, minWidth: 156, minHeight: 156, display: 'grid', placeItems: 'center' }}>
+          {card ? <QRCode value={card.qrToken} size={128} bgColor="#ffffff" fgColor="#12344d" /> : <QrCode size={64} />}
+        </div>
+      </div>
+      <p style={{ margin: '20px 0 0', color: 'var(--muted)', fontSize: 12 }}>
+        Present this personal QR card at the gate. It identifies this account holder and is not a resident membership card.
+      </p>
+    </section>
+  );
+}
+
 // ── Overview panel ────────────────────────────────────────────────────
-function MerchantOverview({ m, isApproved, setView, pendingWalkIns }: {
+function MerchantOverview({ m, isApproved, isOwner, setView, pendingWalkIns }: {
   m: MerchantUserProfile['merchant'];
   isApproved: boolean;
+  isOwner: boolean;
   setView: (v: MerchantView) => void;
   pendingWalkIns: number;
 }) {
   return (
     <section style={{ marginTop: 24 }}>
+      {!isOwner && (
+        <div className="admin-workspace" style={{ padding: '28px 24px' }}>
+          <QrCode size={32} style={{ color: 'var(--muted)', marginBottom: 10 }} />
+          <h3 style={{ fontSize: 16, marginBottom: 8 }}>Merchant staff access</h3>
+          <p style={{ color: 'var(--muted)', fontSize: 13, maxWidth: 520 }}>
+            Your account is an identity and gate-access account for {m.businessName}. Scanning resident cards
+            and merchant operations are restricted to the merchant owner.
+          </p>
+          <button className="primary-button" onClick={() => setView('card')} style={{ marginTop: 10 }}>
+            <QrCode size={16} /> View my entry card
+          </button>
+        </div>
+      )}
       {!isApproved && (
         <div className="admin-workspace" style={{ padding: '28px 24px', textAlign: 'center' }}>
           <ShieldCheck size={36} style={{ color: 'var(--muted)', margin: '0 auto 12px', display: 'block' }} />
@@ -1256,7 +1304,7 @@ function MerchantOverview({ m, isApproved, setView, pendingWalkIns }: {
           </p>
         </div>
       )}
-      {isApproved && (
+      {isOwner && isApproved && (
         <div className="admin-metrics" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
           <div className="admin-metric" style={{ cursor: 'pointer' }} onClick={() => setView('scan')}>
             <span className="approved"><ShieldCheck size={19} /></span>

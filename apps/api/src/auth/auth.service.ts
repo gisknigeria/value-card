@@ -73,6 +73,12 @@ export class AuthService {
           email,
           passwordHash,
           role: UserRole.RESIDENT,
+          accessCard: {
+            create: {
+              cardNumber: `BVC-RES-${randomBytes(6).toString('hex').toUpperCase()}`,
+              qrToken: `BVC-ACCESS-${randomBytes(24).toString('base64url')}`,
+            },
+          },
           resident: {
             create: {
               fullName: input.fullName?.trim() || '',

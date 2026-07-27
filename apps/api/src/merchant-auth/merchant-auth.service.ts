@@ -10,6 +10,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ApprovalStatus, MerchantUserRole, Prisma, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterMerchantDto } from './dto/register-merchant.dto';
 import { MerchantLoginDto } from './dto/merchant-login.dto';
@@ -35,7 +36,14 @@ const merchantUserSelect = {
   id: true,
   role: true,
   isActive: true,
-  user: { select: { id: true, phone: true, email: true, displayName: true } },
+  user: {
+    select: {
+      id: true, phone: true, email: true, displayName: true,
+      accessCard: {
+        select: { cardNumber: true, qrToken: true, status: true, issuedAt: true, expiresAt: true },
+      },
+    },
+  },
   merchant: { select: merchantSelect },
 } satisfies Prisma.MerchantUserSelect;
 
@@ -80,6 +88,7 @@ export class MerchantAuthService {
             email,
             passwordHash,
             role: UserRole.MERCHANT,
+            accessCard: { create: this.newAccessCard('MER') },
             merchantUser: {
               create: {
                 merchantId: merchant.id,
@@ -198,6 +207,7 @@ export class MerchantAuthService {
           displayName: input.fullName.trim() || null,
           passwordHash,
           role: UserRole.MERCHANT,
+          accessCard: { create: this.newAccessCard('MER') },
           merchantUser: {
             create: {
               merchantId,
@@ -334,6 +344,14 @@ export class MerchantAuthService {
     };
   }
 
+  private newAccessCard(prefix: string) {
+    const id = randomBytes(6).toString('hex').toUpperCase();
+    return {
+      cardNumber: `BVC-${prefix}-${id}`,
+      qrToken: `BVC-ACCESS-${randomBytes(24).toString('base64url')}`,
+    };
+  }
+
   private matchesDemoMerchant(identifier: string, phone: string, password: string) {
     const normalized = identifier.toLowerCase();
     return (
@@ -351,6 +369,14 @@ export class MerchantAuthService {
         id: DEMO_MERCHANT_USER_ID,
         phone: '08030000002',
         email: 'cedar@bodija.example.com',
+        displayName: 'Morenike James',
+        accessCard: {
+          cardNumber: 'BVC-MER-DEMO0001',
+          qrToken: 'BVC-ACCESS-MERCHANT-DEMO',
+          status: 'ACTIVE',
+          issuedAt: new Date('2026-06-18T00:00:00.000Z'),
+          expiresAt: null,
+        },
       },
       merchant: {
         id: DEMO_MERCHANT_ID,

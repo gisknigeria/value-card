@@ -85,8 +85,22 @@ model User {
   updatedAt    DateTime   @updatedAt
   resident     Resident?
   merchantUser MerchantUser?
+  accessCard   AccessCard?
   loggedTransactions Transaction[] @relation("LoggedBy")
   notifications Notification[]
+}
+
+/// Role-neutral gate identity. Every account (resident, merchant owner/staff,
+/// security and admin) receives one of these cards.
+model AccessCard {
+  id         String     @id @default(cuid())
+  userId     String     @unique
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cardNumber String     @unique
+  qrToken    String     @unique
+  status     CardStatus @default(ACTIVE)
+  issuedAt   DateTime   @default(now())
+  expiresAt  DateTime?
 }
 
 model Resident {
