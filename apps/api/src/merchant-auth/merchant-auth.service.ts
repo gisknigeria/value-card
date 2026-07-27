@@ -435,6 +435,27 @@ export class MerchantAuthService {
         }
       }
 
+      const recipients = await tx.merchantUser.findMany({
+        where: { merchantId },
+        select: { userId: true },
+      });
+      for (const recipient of recipients) {
+        await tx.notification.create({
+          data: {
+            userId: recipient.userId,
+            type: `MERCHANT_${input.status}`,
+            title:
+              input.status === ApprovalStatus.APPROVED ? 'Merchant profile approved' :
+              input.status === ApprovalStatus.REJECTED ? 'Merchant profile not approved' :
+              input.status === ApprovalStatus.SUSPENDED ? 'Merchant profile suspended' :
+              'Merchant profile under review',
+            body: input.reason
+              ? `${result.businessName}: ${input.reason}`
+              : `${result.businessName} is now ${input.status.toLowerCase()}.`,
+          },
+        });
+      }
+
       return result;
     });
 
@@ -469,6 +490,16 @@ export class MerchantAuthService {
       where: { id: staff.id },
       data: { canScanCards },
       select: merchantUserSelect,
+    });
+    await this.prisma.notification.create({
+      data: {
+        userId: staffUserId,
+        type: 'MERCHANT_SCAN_PERMISSION',
+        title: canScanCards ? 'Card scanning enabled' : 'Card scanning disabled',
+        body: canScanCards
+          ? 'The merchant owner has granted you permission to scan customer cards.'
+          : 'The merchant owner has removed your permission to scan customer cards.',
+      },
     });
     return { merchantUser: updated };
   }

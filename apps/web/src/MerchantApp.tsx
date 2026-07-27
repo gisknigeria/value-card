@@ -55,6 +55,13 @@ import {
   getMerchantWalkIns,
   acknowledgeWalkIn,
   getResidentDirectory,
+  getResidentDashboard,
+  getNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  getMyVisitorPasses,
+  createVisitorPass,
+  deleteVisitorPass,
   type MerchantSession,
   type MerchantUserProfile,
   type MerchantOffer,
@@ -66,6 +73,9 @@ import {
   type MerchantReport,
   type WalkInLog,
   type ResidentDirectory,
+  type ResidentDashboardResponse,
+  type AppNotification,
+  type VisitorPass,
 } from './api';
 
 const MERCHANT_TOKEN_KEY = 'bodija-merchant-token';
@@ -1157,19 +1167,67 @@ function OffersPanel({ token, isApproved }: { token: string; isApproved: boolean
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────
-type MerchantView = 'overview' | 'card' | 'scan' | 'offers' | 'transactions' | 'reports' | 'walkins' | 'staff' | 'profile';
+type MerchantView = 'overview' | 'card' | 'benefits' | 'activity' | 'visitors' | 'notifications' | 'scan' | 'offers' | 'transactions' | 'reports' | 'walkins' | 'staff' | 'profile';
 
 function MerchantDashboard({ session, logout }: { session: MerchantSession; logout: () => void }) {
   const [view, setView] = useState<MerchantView>('overview');
   const [showChangePw, setShowChangePw] = useState(false);
   const [offers, setOffers] = useState<MerchantOffer[]>([]);
   const [pendingWalkIns, setPendingWalkIns] = useState(0);
+  const [memberData, setMemberData] = useState<ResidentDashboardResponse | null>(null);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [sosSending, setSosSending] = useState(false);
+  const [sosMessage, setSosMessage] = useState('');
   const mu = session.merchantUser;
   const m = mu.merchant;
   const isOwner = mu.role === 'OWNER';
   const canScanCards = isOwner || mu.canScanCards;
   const isApproved = m.approvalStatus === 'APPROVED';
   const socketRef = useRef<any>(null);
+
+  const loadPersonalData = useCallback(() => {
+    getResidentDashboard(session.accessToken).then(setMemberData).catch(() => {});
+    getNotifications(session.accessToken).then(data => {
+      setNotifications(data.notifications);
+      setUnreadCount(data.unreadCount);
+    }).catch(() => {});
+  }, [session.accessToken]);
+  useEffect(() => {
+    loadPersonalData();
+    const timer = window.setInterval(loadPersonalData, 60_000);
+    return () => window.clearInterval(timer);
+  }, [loadPersonalData]);
+
+  const sendSos = async () => {
+    if (!window.confirm('Send an SOS alert to Bodija security?')) return;
+    setSosSending(true); setSosMessage('');
+    try {
+      const position = await new Promise<GeolocationPosition | null>(resolve => {
+        if (!navigator.geolocation) return resolve(null);
+        navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), { timeout: 8000 });
+      });
+      const securityUrl = (import.meta as any).env?.VITE_SECURITY_API_URL || '';
+      const response = await fetch(`${securityUrl}/api/resident/sos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.accessToken}` },
+        body: JSON.stringify({
+          name: mu.user.displayName || m.contactPerson,
+          phone: mu.user.phone,
+          lat: position?.coords.latitude,
+          lng: position?.coords.longitude,
+          unit: m.associationName || m.location,
+          command: m.associationName || 'Bodija',
+          type: 'Merchant SOS',
+          message: `SOS from ${mu.role === 'OWNER' ? 'merchant owner' : 'merchant staff'} at ${m.businessName}`,
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.message || 'Unable to send SOS');
+      setSosMessage('SOS sent to security.');
+    } catch (e) { setSosMessage(e instanceof Error ? e.message : 'Unable to send SOS'); }
+    finally { setSosSending(false); }
+  };
 
   // Pre-load offers so ScanPanel can use them
   useEffect(() => {
@@ -1219,6 +1277,10 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
         <div className="admin-account">
           <div><strong>{m.businessName}</strong><small>{mu.role === 'OWNER' ? 'Owner' : 'Sales staff'} · {m.category}</small></div>
           <button onClick={() => setShowChangePw(true)} title="Change password" aria-label="Change password" style={{ marginRight: 6 }}><KeyRound size={18} /></button>
+          <button onClick={() => setView('notifications')} title="Notifications" aria-label="Notifications" style={{ marginRight: 6, position: 'relative' }}>
+            <Bell size={18} />{unreadCount > 0 && <span style={{ position: 'absolute', top: 2, right: 2, background: '#dc2626', color: '#fff', borderRadius: 9, minWidth: 16, fontSize: 9 }}>{unreadCount}</span>}
+          </button>
+          <button onClick={() => void sendSos()} disabled={sosSending} title="Send SOS" aria-label="Send SOS" style={{ marginRight: 6, color: '#b42318' }}><AlertTriangle size={18} /></button>
           <button onClick={logout} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
         </div>
       </header>
@@ -1246,6 +1308,9 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
           <button className={view === 'card' ? 'active' : ''} onClick={() => setView('card')}>
             <QrCode size={16} /> My card
           </button>
+          <button className={view === 'benefits' ? 'active' : ''} onClick={() => setView('benefits')}><Tag size={16} /> Explore benefits</button>
+          <button className={view === 'activity' ? 'active' : ''} onClick={() => setView('activity')}><RefreshCw size={16} /> My activity</button>
+          <button className={view === 'visitors' ? 'active' : ''} onClick={() => setView('visitors')}><QrCode size={16} /> Visitor codes</button>
           {canScanCards && isApproved && (
             <button className={view === 'scan' ? 'active' : ''} onClick={() => setView('scan')}>
               <ShieldCheck size={16} /> Scan & log
@@ -1288,6 +1353,10 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
 
         {view === 'overview'     && <MerchantOverview m={m} isApproved={isApproved} isOwner={isOwner} setView={setView} pendingWalkIns={pendingWalkIns} />}
         {view === 'card'         && <RoleAccessCard mu={mu} />}
+        {view === 'benefits'     && <PersonalBenefits data={mu.user.resident?.approvalStatus === 'APPROVED' ? memberData : null} />}
+        {view === 'activity'     && <PersonalActivity data={mu.user.resident?.approvalStatus === 'APPROVED' ? memberData : null} />}
+        {view === 'visitors'     && <MerchantVisitorCodes token={session.accessToken} approved={mu.user.resident?.approvalStatus === 'APPROVED'} />}
+        {view === 'notifications' && <MerchantNotifications token={session.accessToken} items={notifications} setItems={setNotifications} setUnreadCount={setUnreadCount} />}
         {view === 'scan'         && <ScanPanel token={session.accessToken} offers={offers} />}
         {view === 'offers'       && <OffersPanel token={session.accessToken} isApproved={isApproved} />}
         {view === 'transactions' && <TransactionsPanel token={session.accessToken} />}
@@ -1295,6 +1364,7 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
         {view === 'walkins'      && <WalkInsPanel token={session.accessToken} merchantId={m.id} />}
         {view === 'staff'        && <StaffPanel token={session.accessToken} isOwner={isOwner} />}
         {view === 'profile'      && <MerchantProfile m={m} mu={mu} />}
+        {sosMessage && <div className={sosMessage.startsWith('SOS sent') ? 'profile-success' : 'auth-error'} style={{ marginTop: 14 }}>{sosMessage}</div>}
       </main>
     </div>
   );
@@ -1329,6 +1399,87 @@ function RoleAccessCard({ mu }: { mu: MerchantUserProfile }) {
           ? 'Use this personal benefit card at participating merchants and present it for gate identification.'
           : `Your QR code and card will appear after ${mu.merchant.associationName || 'your association'} confirms your profile.`}
       </p>
+    </section>
+  );
+}
+
+function PersonalBenefits({ data }: { data: ResidentDashboardResponse | null }) {
+  if (!data) return <section className="admin-workspace" style={{ marginTop: 24, padding: 24 }}>Benefits become available after association approval.</section>;
+  return (
+    <section style={{ marginTop: 24 }}>
+      <div className="admin-metrics">
+        <div className="admin-metric"><strong>{data.metrics.availableOffers}</strong><small>Available offers</small></div>
+        <div className="admin-metric"><strong>{data.metrics.categories}</strong><small>Categories</small></div>
+        <div className="admin-metric"><strong>₦{data.metrics.rewardBalance.toLocaleString()}</strong><small>Reward balance</small></div>
+      </div>
+      <div className="admin-workspace" style={{ marginTop: 16, padding: 20 }}>
+        <h3>Explore personal benefits</h3>
+        {data.offers.map(offer => (
+          <div key={offer.id} className="dependant-card" style={{ marginBottom: 8 }}>
+            <div className="dependant-avatar">{offer.initials}</div>
+            <div className="dependant-info"><strong>{offer.merchant}</strong><span>{offer.category} · {offer.value}</span><small>{offer.rule} · {offer.location}</small></div>
+          </div>
+        ))}
+        {data.offers.length === 0 && <p style={{ color: 'var(--muted)' }}>No active benefits right now.</p>}
+      </div>
+    </section>
+  );
+}
+
+function PersonalActivity({ data }: { data: ResidentDashboardResponse | null }) {
+  return (
+    <section className="admin-workspace" style={{ marginTop: 24, padding: 20 }}>
+      <h3>My benefit activity</h3>
+      {!data && <p style={{ color: 'var(--muted)' }}>Activity becomes available after association approval.</p>}
+      {data?.recentActivity.map(item => (
+        <div key={item.id} className="dependant-card" style={{ marginBottom: 8 }}>
+          <div className="dependant-info"><strong>{item.merchant}</strong><span>{item.category} · Saved ₦{item.saved.toLocaleString()}</span><small>{new Date(item.createdAt).toLocaleString('en-GB')}</small></div>
+        </div>
+      ))}
+      {data && data.recentActivity.length === 0 && <p style={{ color: 'var(--muted)' }}>No benefit activity yet.</p>}
+    </section>
+  );
+}
+
+function MerchantVisitorCodes({ token, approved }: { token: string; approved: boolean }) {
+  const [passes, setPasses] = useState<VisitorPass[]>([]);
+  const [label, setLabel] = useState('');
+  const [error, setError] = useState('');
+  const load = useCallback(() => getMyVisitorPasses(token).then(data => setPasses(data.passes)).catch(e => setError(e instanceof Error ? e.message : 'Unable to load visitor codes')), [token]);
+  useEffect(() => { void load(); }, [load]);
+  const create = async (e: FormEvent) => {
+    e.preventDefault(); setError('');
+    try { await createVisitorPass(token, label || undefined); setLabel(''); await load(); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Unable to create visitor code'); }
+  };
+  return (
+    <section className="admin-workspace" style={{ marginTop: 24, padding: 20 }}>
+      <h3>Visitor codes</h3>
+      <p style={{ color: 'var(--muted)', fontSize: 13 }}>Generate a temporary code for a visitor coming to your household or business.</p>
+      {error && <div className="auth-error">{error}</div>}
+      {approved && <form onSubmit={create} style={{ display: 'flex', gap: 8, marginBottom: 16 }}><div className="auth-input" style={{ flex: 1 }}><input value={label} onChange={e => setLabel(e.target.value)} placeholder="Visitor name or purpose" /></div><button className="primary-button">Generate</button></form>}
+      {!approved && <div className="approval-timeline timeline-pending"><div className="timeline-body"><strong>Association approval required</strong><p>Visitor-code generation unlocks when your personal card is approved.</p></div></div>}
+      {passes.map(pass => <div key={pass.id} className="dependant-card" style={{ marginBottom: 8 }}><div className="dependant-info"><strong>{pass.code}</strong><span>{pass.label || 'Visitor pass'}</span><small>Expires {new Date(pass.expiresAt).toLocaleString('en-GB')}</small></div><button className="icon-button" onClick={async () => { await deleteVisitorPass(token, pass.id); await load(); }}><Trash2 size={15} /></button></div>)}
+    </section>
+  );
+}
+
+function MerchantNotifications({ token, items, setItems, setUnreadCount }: {
+  token: string;
+  items: AppNotification[];
+  setItems: React.Dispatch<React.SetStateAction<AppNotification[]>>;
+  setUnreadCount: React.Dispatch<React.SetStateAction<number>>;
+}) {
+  const read = async (id: string) => {
+    await markNotificationRead(token, id);
+    setItems(current => current.map(item => item.id === id ? { ...item, isRead: true } : item));
+    setUnreadCount(count => Math.max(0, count - 1));
+  };
+  return (
+    <section className="admin-workspace" style={{ marginTop: 24, padding: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}><h3>Notifications</h3><button className="secondary-button" onClick={async () => { await markAllNotificationsRead(token); setItems(current => current.map(item => ({ ...item, isRead: true }))); setUnreadCount(0); }}>Mark all read</button></div>
+      {items.map(item => <button key={item.id} onClick={() => void read(item.id)} className="dependant-card" style={{ width: '100%', textAlign: 'left', marginBottom: 8, opacity: item.isRead ? .7 : 1 }}><div className="dependant-info"><strong>{item.title}</strong><span>{item.body}</span><small>{new Date(item.createdAt).toLocaleString('en-GB')}</small></div></button>)}
+      {items.length === 0 && <p style={{ color: 'var(--muted)' }}>No notifications yet.</p>}
     </section>
   );
 }
