@@ -76,6 +76,7 @@ model User {
   phone        String     @unique
   email        String?    @unique
   passwordHash String
+  displayName  String?
   role         UserRole
   adminRole    AdminRole?
   associationName String?

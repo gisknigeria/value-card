@@ -1085,7 +1085,7 @@ function AdminWalkInPanel({ token }: { token: string }) {
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+      <div className="admin-walkin-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
 
         {/* ── Log form ── */}
         <div className="admin-workspace" style={{ padding: 20 }}>

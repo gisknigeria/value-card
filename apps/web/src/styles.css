@@ -826,3 +826,314 @@ p .text-button {
 .admin-status.investigating { background: #ede4cc; color: #7a5f1e; }
 .admin-status.reviewed      { background: #e2eaf4; color: #355e8c; }
 .admin-status.reversed      { background: #e7edf1; color: #526977; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   COMPREHENSIVE RESPONSIVE OVERRIDES
+   Covers: Admin shell, Merchant shell, section tabs, walk-in panel,
+           merchant dashboard nav, modal cards, form rows, utilities.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Admin section tabs — scrollable on all screens ────────────────── */
+.admin-section-tabs {
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+.admin-section-tabs::-webkit-scrollbar { display: none; }
+.admin-section-tabs button { flex: 0 0 auto; }
+
+/* ── Merchant sidebar nav — already horizontal, needs scroll ────────── */
+.merchant-nav {
+  overflow-x: auto;
+  scrollbar-width: none;
+  white-space: nowrap;
+}
+.merchant-nav::-webkit-scrollbar { display: none; }
+
+/* ── Modal cards — always fit viewport ─────────────────────────────── */
+.modal-backdrop { padding: 16px; }
+.modal-card { width: min(460px, 100%); }
+
+/* ── Resident detail modal tabs on small screens ────────────────────── */
+.modal-card .admin-section-tabs {
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+/* ── Utility: hide on mobile ────────────────────────────────────────── */
+.hide-mobile { /* defined below in breakpoints */ }
+
+/* ══════════════════════════════════════════════
+   ≤ 1100px  — large tablet / small laptop
+   ══════════════════════════════════════════════ */
+@media (max-width: 1100px) {
+  /* Admin metrics: 4→2 cols */
+  .admin-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  /* Walk-in admin panel: side-by-side → stacked */
+  .admin-walkin-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ══════════════════════════════════════════════
+   ≤ 900px  — tablet portrait / phablet
+   ══════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  /* Admin + Merchant header: tighten */
+  .admin-header { padding: 0 20px; }
+  .admin-main   { padding: 24px 20px 48px; }
+
+  /* Admin metrics: keep 2-col */
+  .admin-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 20px 0 18px; }
+
+  /* Admin + Merchant section tabs: reduce padding for more tabs to show */
+  .admin-section-tabs button { height: 38px; padding: 0 12px; font-size: 12px; gap: 5px; }
+
+  /* Merchant dashboard sidebar nav buttons */
+  .admin-shell .admin-section-tabs button svg { display: none; }
+
+  /* Admin title */
+  .admin-title { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .admin-title h1 { font-size: 22px; }
+  .admin-live { margin-top: 0; }
+
+  /* Admin workspace toolbar: stack on tablet */
+  .admin-toolbar { flex-direction: column; align-items: flex-start; gap: 10px; min-height: auto; padding: 14px 16px; }
+  .admin-status-tabs { width: 100%; }
+  .admin-search { width: 100%; }
+
+  /* Merchant login reuses admin-login-page — already has 900px rule,
+     just tighten the right panel */
+  .admin-login-form { padding: 28px 22px; }
+}
+
+/* ══════════════════════════════════════════════
+   ≤ 768px  — tablet landscape → portrait
+   ══════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Admin + Merchant dashboard: full-width header */
+  .admin-header { height: 60px; }
+  .admin-brand strong { font-size: 14px; }
+  .admin-account > div { display: none; }
+
+  /* Metrics: 2-col, smaller */
+  .admin-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .admin-metric { min-height: 72px; padding: 12px; gap: 10px; }
+  .admin-metric > span { width: 34px; height: 34px; flex-basis: 34px; }
+  .admin-metric strong { font-size: 19px; }
+
+  /* Section tabs: icon hidden, text only, smaller */
+  .admin-section-tabs button { font-size: 11px; padding: 0 10px; gap: 4px; }
+  .admin-section-tabs button svg { width: 13px; height: 13px; }
+
+  /* Admin resident list: simplified layout */
+  .admin-list-head { display: none; }
+  .admin-resident-row { grid-template-columns: 1fr auto; gap: 12px; }
+  .admin-membership, .admin-application { padding-left: 49px; }
+  .admin-row-actions { grid-column: 2; grid-row: 1 / span 3; flex-direction: column; justify-content: center; }
+
+  /* Admin toolbar */
+  .admin-toolbar { flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 14px; }
+  .admin-search { width: 100%; max-width: none; }
+  .admin-status-tabs { overflow-x: auto; width: 100%; }
+
+  /* Merchant dashboard nav: reduce icon + text */
+  .admin-shell .admin-section-tabs button { height: 36px; padding: 0 9px; font-size: 10px; }
+
+  /* Walk-in panel: always stacked */
+  .admin-walkin-grid { grid-template-columns: 1fr !important; }
+
+  /* Auth pages: already handled at 900px, extra squeeze */
+  .auth-form-wrap { padding: 0; }
+  .auth-heading h2 { font-size: 22px; }
+
+  /* Modal backdrop: full edge-to-edge on mobile */
+  .modal-backdrop { padding: 12px; }
+  .modal-card { padding: 22px 18px; }
+
+  /* Dependant card */
+  .dependant-card { grid-template-columns: 38px 1fr; }
+  .dependant-actions { grid-column: 1 / -1; justify-content: flex-end; }
+}
+
+/* ══════════════════════════════════════════════
+   ≤ 620px  — large phone
+   ══════════════════════════════════════════════ */
+@media (max-width: 620px) {
+  /* Admin title */
+  .admin-title h1 { font-size: 19px; }
+  .admin-title p { display: none; }
+  .admin-live { display: none; }
+
+  /* Metrics: 2-col tight */
+  .admin-metrics { gap: 7px; margin: 16px 0 14px; }
+  .admin-metric { padding: 10px; gap: 8px; }
+  .admin-metric small { font-size: 9px; }
+  .admin-metric strong { font-size: 17px; }
+
+  /* Section tabs: icon-only on very tight screens */
+  .admin-section-tabs button { font-size: 0; padding: 0 11px; gap: 0; }
+  .admin-section-tabs button svg { display: block !important; width: 16px; height: 16px; font-size: 16px; }
+  .admin-section-tabs button.active { border-bottom-width: 3px; }
+
+  /* Admin row actions: smaller buttons */
+  .admin-row-actions button { min-width: 30px; height: 30px; }
+  .admin-row-actions button.approve span { display: none; }
+
+  /* Resident page content padding */
+  .page-content { padding: 20px 16px 36px; }
+
+  /* Auth field row: always 1 col from here */
+  .auth-field-row { grid-template-columns: 1fr !important; }
+
+  /* Modal */
+  .modal-backdrop { padding: 8px; }
+  .modal-card { padding: 20px 16px; border-radius: 12px; }
+  .modal-actions { flex-direction: column-reverse; gap: 8px; }
+  .modal-actions button { width: 100%; }
+
+  /* Approval timeline */
+  .approval-timeline { padding: 12px; }
+
+  /* Walk-in panel: stacked + full width buttons */
+  .admin-walkin-grid { grid-template-columns: 1fr !important; }
+  .admin-walkin-grid > div:last-child { display: none; } /* hide recent board on phone, keep form */
+
+  /* Merchant scan panel — full width */
+  .scan-result-grid { grid-template-columns: 1fr !important; }
+}
+
+/* ══════════════════════════════════════════════
+   ≤ 480px  — small phone
+   ══════════════════════════════════════════════ */
+@media (max-width: 480px) {
+  /* Admin header */
+  .admin-header { padding: 0 14px; }
+  .admin-main { padding: 18px 14px 40px; }
+
+  /* Brand mark shrink */
+  .admin-brand strong { font-size: 13px; }
+
+  /* Metrics: 1-col on very small screens */
+  .admin-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  /* Resident topbar */
+  .topbar { padding: 0 14px; height: 64px; }
+  .topbar h1 { font-size: 16px; }
+
+  /* Auth page: very tight */
+  .auth-panel { padding: 20px 16px 30px; }
+  .auth-heading h2 { font-size: 20px; }
+  .auth-form { gap: 10px; }
+  .auth-submit { height: 48px; }
+
+  /* Section tabs: ensure comfortable tapping */
+  .admin-section-tabs button { min-height: 40px; }
+
+  /* Primary/secondary buttons full width in modals */
+  .modal-actions button { height: 44px; }
+}
+
+/* ══════════════════════════════════════════════
+   Merchant-specific dashboard responsive
+   ══════════════════════════════════════════════ */
+
+/* Merchant dashboard shell inherits admin-shell.
+   These target the merchant-specific nav structure */
+@media (max-width: 900px) {
+  /* Merchant dashboard: tab text label truncation */
+  .admin-shell .admin-section-tabs {
+    padding-bottom: 2px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Merchant overview metrics grid */
+  .admin-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  /* Merchant offer list: simplify */
+  .offer-row { grid-template-columns: 1fr auto !important; }
+  .offer-row .rule-cell { display: none; }
+  .offer-row .category-cell { display: none; }
+
+  /* Merchant staff grid */
+  .staff-row { grid-template-columns: 1fr auto !important; }
+}
+
+/* ══════════════════════════════════════════════
+   Resident portal — additional responsive fixes
+   ══════════════════════════════════════════════ */
+@media (max-width: 800px) {
+  /* Visitor passes table */
+  .activity-table { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* SOS button: smaller on mobile */
+  .sos-button { min-height: 34px; padding: 0 11px; font-size: 12px; }
+
+  /* Support page: full width */
+  .support-grid { grid-template-columns: 1fr !important; }
+
+  /* Notification panel: full width */
+  .notif-panel { width: 100vw; border-left: 0; }
+}
+
+@media (max-width: 560px) {
+  /* Resident card: smaller QR */
+  .qr, .narrow-page .qr { width: 68px !important; height: 68px !important; }
+  .qr svg { width: 60px !important; height: 60px !important; }
+  .card-bottom { grid-template-columns: 1fr 1fr 68px !important; gap: 7px; }
+
+  /* Benefit directory row */
+  .benefit-row { grid-template-columns: 36px minmax(0, 1fr) auto !important; }
+
+  /* Activity table: horizontal scroll */
+  .activity-table { overflow-x: auto; display: block; -webkit-overflow-scrolling: touch; }
+  .table-head, .table-row { min-width: 580px; }
+
+  /* Profile page */
+  .status-panel { grid-template-columns: 1fr !important; }
+  .status-panel > div:first-child { grid-column: auto; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+  .card-actions { flex-direction: column; }
+  .card-actions button { width: 100%; }
+}
+
+/* ══════════════════════════════════════════════
+   Shared — button and input min touch targets
+   ══════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* All interactive elements: minimum 44px touch target */
+  .primary-button,
+  .secondary-button,
+  .outline-button,
+  .icon-button {
+    min-height: 42px;
+  }
+
+  /* Inputs: comfortable typing height */
+  .auth-input,
+  .admin-login-form input,
+  .admin-search {
+    min-height: 44px;
+  }
+
+  /* Admin section tab active indicator: thicker for visibility */
+  .admin-section-tabs button.active {
+    border-bottom-width: 3px;
+  }
+}
+
+/* ══════════════════════════════════════════════
+   Safe area support (notched phones)
+   ══════════════════════════════════════════════ */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .mobile-nav {
+    padding-bottom: env(safe-area-inset-bottom);
+    height: calc(66px + env(safe-area-inset-bottom));
+  }
+  .main-area {
+    padding-bottom: calc(66px + env(safe-area-inset-bottom));
+  }
+}

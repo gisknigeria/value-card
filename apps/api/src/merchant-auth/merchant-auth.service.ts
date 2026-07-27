@@ -35,7 +35,7 @@ const merchantUserSelect = {
   id: true,
   role: true,
   isActive: true,
-  user: { select: { id: true, phone: true, email: true } },
+  user: { select: { id: true, phone: true, email: true, displayName: true } },
   merchant: { select: merchantSelect },
 } satisfies Prisma.MerchantUserSelect;
 
@@ -195,6 +195,7 @@ export class MerchantAuthService {
       const user = await this.prisma.user.create({
         data: {
           phone,
+          displayName: input.fullName.trim() || null,
           passwordHash,
           role: UserRole.MERCHANT,
           merchantUser: {

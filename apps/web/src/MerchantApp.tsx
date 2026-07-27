@@ -415,8 +415,8 @@ function StaffPanel({ token, isOwner }: { token: string; isOwner: boolean }) {
               <label>
                 <span style={{ fontSize: 12, fontWeight: 700, color: '#2a4454', display: 'block', marginBottom: 5 }}>Role</span>
                 <select value={inviteForm.role} onChange={e => setInviteForm(f => ({ ...f, role: e.target.value as 'OWNER' | 'STAFF' }))} style={{ width: '100%', height: 45, padding: '0 12px', border: '1px solid #cad4da', borderRadius: 6, font: 'inherit', fontSize: 14 }}>
-                  <option value="STAFF">Staff</option>
-                  <option value="OWNER">Owner</option>
+                  <option value="STAFF">Sales staff</option>
+                  <option value="OWNER">Co-owner</option>
                 </select>
               </label>
               <div className="modal-actions">
@@ -430,28 +430,35 @@ function StaffPanel({ token, isOwner }: { token: string; isOwner: boolean }) {
 
       {error && <div className="auth-error" role="alert">{error}</div>}
       {loading && <div style={{ color: 'var(--muted)', fontSize: 12 }}>Loading staff…</div>}
-      {!loading && staff.map(s => (
-        <div key={s.id} className="dependant-card" style={{ marginBottom: 8 }}>
-          <div className="dependant-avatar" style={{ fontSize: 12 }}>
-            {s.user.phone.slice(-2)}
-          </div>
-          <div className="dependant-info">
-            <strong>{s.user.phone}{s.user.email ? ` · ${s.user.email}` : ''}</strong>
-            <span>{s.role}</span>
-            <div className={`dependant-status-badge ${s.isActive ? 'timeline-approved' : 'timeline-rejected'}`}>
-              {s.isActive ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
-              <span>{s.isActive ? 'Active' : 'Deactivated'}</span>
+      {!loading && staff.map(s => {
+        const name = s.user.displayName || s.user.phone;
+        const initials = s.user.displayName
+          ? s.user.displayName.split(/\s+/).slice(0, 2).map(p => p[0]).join('').toUpperCase()
+          : s.user.phone.slice(-2);
+        const roleLabel = s.role === 'OWNER' ? 'Owner' : 'Sales staff';
+        return (
+          <div key={s.id} className="dependant-card" style={{ marginBottom: 8 }}>
+            <div className="dependant-avatar" style={{ fontSize: 12 }}>
+              {initials}
             </div>
-          </div>
-          {isOwner && s.isActive && (
-            <div className="dependant-actions">
-              <button className="icon-button" title="Deactivate" disabled={removingId === s.user.id} onClick={() => remove(s.user.id, s.user.phone)}>
-                <Trash2 size={15} />
-              </button>
+            <div className="dependant-info">
+              <strong>{name}</strong>
+              <span style={{ fontSize: 11 }}>{roleLabel} · {s.user.phone}{s.user.email ? ` · ${s.user.email}` : ''}</span>
+              <div className={`dependant-status-badge ${s.isActive ? 'timeline-approved' : 'timeline-rejected'}`}>
+                {s.isActive ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
+                <span>{s.isActive ? 'Active' : 'Deactivated'}</span>
+              </div>
             </div>
-          )}
-        </div>
-      ))}
+            {isOwner && s.isActive && (
+              <div className="dependant-actions">
+                <button className="icon-button" title="Deactivate" disabled={removingId === s.user.id} onClick={() => remove(s.user.id, name)}>
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
       {!loading && staff.length === 0 && (
         <p style={{ color: 'var(--muted)', fontSize: 12 }}>No staff accounts yet. Add staff to let them log transactions.</p>
       )}
@@ -1151,7 +1158,7 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
       <header className="admin-header">
         <MerchantBrand />
         <div className="admin-account">
-          <div><strong>{m.businessName}</strong><small>{mu.role} · {m.category}</small></div>
+          <div><strong>{m.businessName}</strong><small>{mu.role === 'OWNER' ? 'Owner' : 'Sales staff'} · {m.category}</small></div>
           <button onClick={() => setShowChangePw(true)} title="Change password" aria-label="Change password" style={{ marginRight: 6 }}><KeyRound size={18} /></button>
           <button onClick={logout} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
         </div>
@@ -1445,7 +1452,7 @@ function MerchantProfile({ m, mu }: { m: MerchantUserProfile['merchant']; mu: Me
         </div>
         <div>
           <h2 style={{ fontSize: 20, marginBottom: 3 }}>{m.businessName}</h2>
-          <p style={{ color: 'var(--muted)', fontSize: 12, margin: 0 }}>{m.category} · {mu.role}</p>
+          <p style={{ color: 'var(--muted)', fontSize: 12, margin: 0 }}>{m.category} · {mu.role === 'OWNER' ? 'Owner' : 'Sales staff'}</p>
         </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>

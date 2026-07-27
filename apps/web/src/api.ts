@@ -526,7 +526,7 @@ export interface MerchantUserProfile {
   id: string;
   role: MerchantUserRole;
   isActive: boolean;
-  user: { id: string; phone: string; email: string | null };
+  user: { id: string; phone: string; email: string | null; displayName: string | null };
   merchant: MerchantProfile;
 }
 
