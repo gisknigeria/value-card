@@ -4,12 +4,14 @@ import {
   BadgeCheck,
   BarChart2,
   Bell,
+  Camera,
   CheckCircle2,
   Clock3,
   Eye,
   EyeOff,
   KeyRound,
   LockKeyhole,
+  Image as ImageIcon,
   LogOut,
   MapPin,
   Pause,
@@ -22,6 +24,7 @@ import {
   Search,
   ShieldCheck,
   Store,
+  StopCircle,
   Tag,
   Trash2,
   UserRound,
@@ -541,6 +544,11 @@ function ScanPanel({ token, offers }: { token: string; offers: MerchantOffer[] }
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [scanError, setScanError] = useState('');
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const frameRef = useRef<number | null>(null);
 
   // Transaction logging state
   const [offerId, setOfferId] = useState('');
@@ -557,17 +565,113 @@ function ScanPanel({ token, offers }: { token: string; offers: MerchantOffer[] }
 
   const activeOffers = offers.filter(o => o.status === 'ACTIVE');
 
-  const scan = async (e: FormEvent) => {
-    e.preventDefault();
+  const verifyToken = useCallback(async (value: string) => {
+    const clean = value.trim();
+    if (!clean || scanning) return;
+    setCardToken(clean);
     setScanResult(null); setScanError(''); setLogResult(null); setLogError('');
     setScanning(true);
     try {
-      const result = await merchantScan(token, cardToken.trim(), `scan-${cardToken}-${Date.now()}`);
+      const result = await merchantScan(token, clean, `scan-${clean}-${Date.now()}`);
       setScanResult(result);
+      stopCamera();
     } catch (err) {
       setScanError(err instanceof Error ? err.message : 'Unable to verify card');
     } finally { setScanning(false); }
+  // stopCamera is stable for the lifetime of this mounted panel.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, scanning]);
+
+  const scan = async (e: FormEvent) => {
+    e.preventDefault();
+    await verifyToken(cardToken);
   };
+
+  function stopCamera() {
+    if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+    frameRef.current = null;
+    streamRef.current?.getTracks().forEach(track => track.stop());
+    streamRef.current = null;
+    setCameraOpen(false);
+  }
+
+  const decodeCanvas = async (canvas: HTMLCanvasElement) => {
+    const detectorCtor = (window as any).BarcodeDetector;
+    if (detectorCtor) {
+      try {
+        const codes = await new detectorCtor({ formats: ['qr_code'] }).detect(canvas);
+        if (codes[0]?.rawValue) return String(codes[0].rawValue);
+      } catch { /* use jsQR fallback */ }
+    }
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return null;
+    const image = context.getImageData(0, 0, canvas.width, canvas.height);
+    const jsQR = (await import('jsqr')).default;
+    return jsQR(image.data, image.width, image.height)?.data || null;
+  };
+
+  const startCamera = async () => {
+    setCameraError(''); setScanError('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      setCameraOpen(true);
+      window.setTimeout(() => {
+        const video = videoRef.current;
+        if (!video) return;
+        video.srcObject = stream;
+        void video.play();
+        const canvas = document.createElement('canvas');
+        const tick = async () => {
+          if (!streamRef.current || !video.videoWidth) {
+            frameRef.current = requestAnimationFrame(tick);
+            return;
+          }
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          canvas.getContext('2d')?.drawImage(video, 0, 0);
+          const decoded = await decodeCanvas(canvas);
+          if (decoded) {
+            await verifyToken(decoded);
+            return;
+          }
+          frameRef.current = requestAnimationFrame(tick);
+        };
+        frameRef.current = requestAnimationFrame(tick);
+      }, 0);
+    } catch (error) {
+      setCameraError(error instanceof Error ? error.message : 'Camera access was unavailable');
+      stopCamera();
+    }
+  };
+
+  const scanImage = async (file?: File) => {
+    if (!file) return;
+    setCameraError('');
+    const url = URL.createObjectURL(file);
+    try {
+      const image = new Image();
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error('Unable to open image'));
+        image.src = url;
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      canvas.getContext('2d')?.drawImage(image, 0, 0);
+      const decoded = await decodeCanvas(canvas);
+      if (!decoded) throw new Error('No QR code found in that image');
+      await verifyToken(decoded);
+    } catch (error) {
+      setCameraError(error instanceof Error ? error.message : 'Unable to scan image');
+    } finally { URL.revokeObjectURL(url); }
+  };
+
+  useEffect(() => () => stopCamera(), []);
 
   const logTxn = async (e: FormEvent) => {
     e.preventDefault();
@@ -613,7 +717,8 @@ function ScanPanel({ token, offers }: { token: string; offers: MerchantOffer[] }
         </div>
         <div style={{ padding: '20px' }}>
           {!scanResult && (
-            <form onSubmit={scan} style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+            <>
+            <form onSubmit={scan} style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <label style={{ flex: 1 }}>
                 <span style={{ fontSize: 12, fontWeight: 700, color: '#2a4454', display: 'block', marginBottom: 6 }}>Membership ID or QR token</span>
                 <div className="auth-input"><Search size={16} /><input required value={cardToken} onChange={e => setCardToken(e.target.value)} placeholder="BVC-26-123456 or paste QR token" autoComplete="off" /></div>
@@ -621,7 +726,22 @@ function ScanPanel({ token, offers }: { token: string; offers: MerchantOffer[] }
               <button type="submit" className="primary-button" disabled={scanning} style={{ minHeight: 45, whiteSpace: 'nowrap' }}>
                 <ShieldCheck size={16} /> {scanning ? 'Checking…' : 'Verify card'}
               </button>
+              <button type="button" className="secondary-button" onClick={() => cameraOpen ? stopCamera() : void startCamera()} style={{ minHeight: 45 }}>
+                {cameraOpen ? <StopCircle size={16} /> : <Camera size={16} />} {cameraOpen ? 'Stop camera' : 'Scan with camera'}
+              </button>
+              <label className="secondary-button" style={{ minHeight: 45, cursor: 'pointer' }}>
+                <ImageIcon size={16} /> Scan QR image
+                <input type="file" accept="image/*" capture="environment" hidden onChange={e => { void scanImage(e.target.files?.[0]); e.currentTarget.value = ''; }} />
+              </label>
             </form>
+            {cameraOpen && (
+              <div style={{ marginTop: 14, maxWidth: 520, borderRadius: 12, overflow: 'hidden', background: '#0b1720', position: 'relative' }}>
+                <video ref={videoRef} playsInline muted style={{ width: '100%', display: 'block', maxHeight: 360, objectFit: 'cover' }} />
+                <div style={{ position: 'absolute', inset: '18% 22%', border: '3px solid #fff', borderRadius: 12, boxShadow: '0 0 0 999px rgba(0,0,0,.25)', pointerEvents: 'none' }} />
+              </div>
+            )}
+            {cameraError && <div className="auth-error" role="alert" style={{ marginTop: 12 }}>{cameraError}</div>}
+            </>
           )}
           {scanError && <div className="auth-error" role="alert" style={{ marginTop: 12 }}>{scanError}</div>}
 
