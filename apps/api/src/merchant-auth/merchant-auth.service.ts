@@ -26,6 +26,8 @@ const merchantSelect = {
   phone: true,
   email: true,
   location: true,
+  streetName: true,
+  associationName: true,
   approvalStatus: true,
   statusReason: true,
   statusChangedAt: true,
@@ -36,11 +38,21 @@ const merchantUserSelect = {
   id: true,
   role: true,
   isActive: true,
+  canScanCards: true,
   user: {
     select: {
       id: true, phone: true, email: true, displayName: true,
       accessCard: {
         select: { cardNumber: true, qrToken: true, status: true, issuedAt: true, expiresAt: true },
+      },
+      resident: {
+        select: {
+          approvalStatus: true,
+          associationConfirmedAt: true,
+          card: {
+            select: { membershipId: true, qrToken: true, status: true, issuedAt: true, expiresAt: true },
+          },
+        },
       },
     },
   },
@@ -78,6 +90,8 @@ export class MerchantAuthService {
             phone,
             email,
             location: input.location.trim(),
+            streetName: input.streetName.trim(),
+            associationName: input.associationName.trim(),
           },
           select: merchantSelect,
         });
@@ -89,6 +103,17 @@ export class MerchantAuthService {
             passwordHash,
             role: UserRole.MERCHANT,
             accessCard: { create: this.newAccessCard('MER') },
+            resident: {
+              create: {
+                fullName: input.contactPerson.trim(),
+                neighbourhood: input.associationName.trim(),
+                streetName: input.streetName.trim(),
+                residentialAddress: input.location.trim(),
+                memberCategory: 'Merchant owner',
+                consentedAt: new Date(),
+                card: { create: this.newBenefitCard() },
+              },
+            },
             merchantUser: {
               create: {
                 merchantId: merchant.id,
@@ -194,6 +219,7 @@ export class MerchantAuthService {
     // Only OWNER can invite staff
     const ownerMu = await this.prisma.merchantUser.findFirst({
       where: { userId: ownerUserId, merchantId, role: MerchantUserRole.OWNER, isActive: true },
+      include: { merchant: true },
     });
     if (!ownerMu) throw new ForbiddenException('Only merchant owners can add staff');
 
@@ -208,6 +234,34 @@ export class MerchantAuthService {
           passwordHash,
           role: UserRole.MERCHANT,
           accessCard: { create: this.newAccessCard('MER') },
+          resident: {
+            create: {
+              fullName: input.fullName.trim(),
+              neighbourhood: ownerMu.merchant.associationName || 'Unassigned',
+              streetName: ownerMu.merchant.streetName,
+              residentialAddress: ownerMu.merchant.location,
+              memberCategory: 'Merchant staff',
+              approvalStatus: ownerMu.merchant.approvalStatus === ApprovalStatus.APPROVED
+                ? ApprovalStatus.APPROVED
+                : ApprovalStatus.PENDING,
+              consentedAt: new Date(),
+              associationConfirmedAt: ownerMu.merchant.approvalStatus === ApprovalStatus.APPROVED
+                ? new Date()
+                : null,
+              associationConfirmedBy: ownerUserId,
+              card: {
+                create: {
+                  ...this.newBenefitCard(),
+                  status: ownerMu.merchant.approvalStatus === ApprovalStatus.APPROVED
+                    ? 'ACTIVE'
+                    : 'PENDING_VERIFICATION',
+                  issuedAt: ownerMu.merchant.approvalStatus === ApprovalStatus.APPROVED
+                    ? new Date()
+                    : null,
+                },
+              },
+            },
+          },
           merchantUser: {
             create: {
               merchantId,
@@ -260,9 +314,18 @@ export class MerchantAuthService {
   }
 
   // ── Admin: list all merchants ─────────────────────────────────────────
-  async adminListMerchants(status?: ApprovalStatus, query?: string) {
+  async adminListMerchants(status?: ApprovalStatus, query?: string, adminUserId?: string) {
     const search = query?.trim();
+    const admin = adminUserId ? await this.prisma.user.findUnique({
+      where: { id: adminUserId },
+      select: { adminRole: true, associationName: true },
+    }) : null;
+    const associationScope =
+      admin?.adminRole === 'ASSOCIATION_REP' && admin.associationName
+        ? { associationName: { equals: admin.associationName, mode: 'insensitive' as const } }
+        : {};
     const where: Prisma.MerchantWhereInput = {
+      ...associationScope,
       ...(status ? { approvalStatus: status } : {}),
       ...(search
         ? {
@@ -282,10 +345,10 @@ export class MerchantAuthService {
         select: merchantSelect,
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.merchant.count({ where: { approvalStatus: ApprovalStatus.PENDING } }),
-      this.prisma.merchant.count({ where: { approvalStatus: ApprovalStatus.APPROVED } }),
-      this.prisma.merchant.count({ where: { approvalStatus: ApprovalStatus.REJECTED } }),
-      this.prisma.merchant.count({ where: { approvalStatus: ApprovalStatus.SUSPENDED } }),
+      this.prisma.merchant.count({ where: { ...associationScope, approvalStatus: ApprovalStatus.PENDING } }),
+      this.prisma.merchant.count({ where: { ...associationScope, approvalStatus: ApprovalStatus.APPROVED } }),
+      this.prisma.merchant.count({ where: { ...associationScope, approvalStatus: ApprovalStatus.REJECTED } }),
+      this.prisma.merchant.count({ where: { ...associationScope, approvalStatus: ApprovalStatus.SUSPENDED } }),
     ]);
 
     return { merchants, counts: { pending, approved, rejected, suspended } };
@@ -299,9 +362,24 @@ export class MerchantAuthService {
   ) {
     const merchant = await this.prisma.merchant.findUnique({
       where: { id: merchantId },
-      select: { id: true },
+      select: { id: true, associationName: true },
     });
     if (!merchant) throw new NotFoundException('Merchant not found');
+    const approver = await this.prisma.user.findUnique({
+      where: { id: adminUserId },
+      select: { adminRole: true, associationName: true },
+    });
+    if (
+      approver?.adminRole === 'ASSOCIATION_REP' &&
+      approver.associationName?.toLowerCase() !== merchant.associationName?.toLowerCase()
+    ) {
+      throw new ForbiddenException('This merchant belongs to another association');
+    }
+    if (input.status === ApprovalStatus.APPROVED && merchant.associationName && approver?.adminRole !== 'ASSOCIATION_REP') {
+      throw new ForbiddenException(
+        `The ${merchant.associationName} association representative must approve this merchant`,
+      );
+    }
 
     // If suspended, also deactivate all their staff
     const updated = await this.prisma.$transaction(async tx => {
@@ -328,6 +406,33 @@ export class MerchantAuthService {
           where: { merchantId },
           data: { isActive: true },
         });
+        const now = new Date();
+        const expiresAt = new Date(now);
+        expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+        const merchantUsers = await tx.merchantUser.findMany({
+          where: { merchantId },
+          select: { user: { select: { resident: { select: { id: true, card: { select: { id: true } } } } } } },
+        });
+        for (const link of merchantUsers) {
+          const benefitProfile = link.user.resident;
+          if (!benefitProfile) continue;
+          await tx.resident.update({
+            where: { id: benefitProfile.id },
+            data: {
+              approvalStatus: ApprovalStatus.APPROVED,
+              associationConfirmedAt: now,
+              associationConfirmedBy: adminUserId,
+              statusChangedAt: now,
+              statusChangedBy: adminUserId,
+            },
+          });
+          if (benefitProfile.card) {
+            await tx.card.update({
+              where: { id: benefitProfile.card.id },
+              data: { status: 'ACTIVE', issuedAt: now, expiresAt },
+            });
+          }
+        }
       }
 
       return result;
@@ -344,11 +449,43 @@ export class MerchantAuthService {
     };
   }
 
+  async setStaffScanPermission(
+    ownerUserId: string,
+    merchantId: string,
+    staffUserId: string,
+    canScanCards: boolean,
+  ) {
+    const owner = await this.prisma.merchantUser.findFirst({
+      where: { userId: ownerUserId, merchantId, role: MerchantUserRole.OWNER, isActive: true },
+    });
+    if (!owner) throw new ForbiddenException('Only merchant owners can change staff permissions');
+
+    const staff = await this.prisma.merchantUser.findFirst({
+      where: { userId: staffUserId, merchantId, role: MerchantUserRole.STAFF },
+    });
+    if (!staff) throw new NotFoundException('Staff member not found');
+
+    const updated = await this.prisma.merchantUser.update({
+      where: { id: staff.id },
+      data: { canScanCards },
+      select: merchantUserSelect,
+    });
+    return { merchantUser: updated };
+  }
+
   private newAccessCard(prefix: string) {
     const id = randomBytes(6).toString('hex').toUpperCase();
     return {
       cardNumber: `BVC-${prefix}-${id}`,
       qrToken: `BVC-ACCESS-${randomBytes(24).toString('base64url')}`,
+    };
+  }
+
+  private newBenefitCard() {
+    const id = randomBytes(6).toString('hex').toUpperCase();
+    return {
+      membershipId: `BVC-BEN-${id}`,
+      qrToken: `BVC-BENEFIT-${randomBytes(24).toString('base64url')}`,
     };
   }
 
@@ -365,6 +502,7 @@ export class MerchantAuthService {
       id: 'merchant-demo-link',
       role: MerchantUserRole.OWNER,
       isActive: true,
+      canScanCards: true,
       user: {
         id: DEMO_MERCHANT_USER_ID,
         phone: '08030000002',

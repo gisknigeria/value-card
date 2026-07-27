@@ -5,7 +5,37 @@ export interface ResidentProfile {
   id: string;
   fullName: string;
   neighbourhood: string;
+  streetName: string | null;
+  inventoryNumber: string | null;
+  residentialAddress: string | null;
+  residencyType: string | null;
+  householdSize: number | null;
+  lengthOfStay: string | null;
+  landlordName: string | null;
+  landlordPhone: string | null;
+  buildingType: string | null;
+  householdsInPremises: number | null;
+  ownershipStatus: string | null;
+  constructionYear: string | null;
+  occupation: string | null;
+  businessAddress: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  securityProvider: string | null;
+  securityPhone: string | null;
+  securityArrangement: string | null;
+  hasCctv: boolean | null;
+  hasSecurityLights: boolean | null;
+  powerSources: string[];
+  waterSources: string[];
+  wasteDisposalMethods: string[];
+  enumerationDate: string | null;
+  enumeratorName: string | null;
+  enumeratorPhone: string | null;
+  associationConfirmedAt: string | null;
   memberCategory: string;
+  registrationType: 'INDIVIDUAL' | 'FAMILY';
+  householdRole: 'TENANT' | 'LANDLORD' | 'AGENT' | null;
   approvalStatus: ApprovalStatus;
   statusReason: string | null;
   statusChangedAt: string | null;
@@ -84,6 +114,8 @@ export interface ResidentDashboardOffer {
   model: 'Immediate' | 'Accumulated';
   rule: string;
   location: string;
+  streetName: string | null;
+  associationName: string | null;
   validUntil: string | null;
   tone: string;
 }
@@ -190,13 +222,36 @@ export function registerResident(input: {
   email?: string;
   password: string;
   neighbourhood: string;
+  streetName?: string;
   memberCategory: string;
+  registrationType: 'INDIVIDUAL' | 'FAMILY';
+  householdRole: 'TENANT' | 'LANDLORD' | 'AGENT';
+  familyMembers?: {
+    fullName: string;
+    relationship: string;
+    phone?: string;
+    dateOfBirth?: string;
+    isMinor: boolean;
+  }[];
   consent: boolean;
 }) {
   return apiRequest<AuthSession>('/api/auth/resident/register', {
     method: 'POST',
     body: JSON.stringify(input),
   });
+}
+
+export interface ResidentDirectory {
+  associations: {
+    name: string;
+    chairmanName: string | null;
+    streets: { name: string }[];
+  }[];
+  unassignedStreets: { name: string }[];
+}
+
+export function getResidentDirectory() {
+  return apiRequest<ResidentDirectory>('/api/auth/resident/directory');
 }
 
 export function loginResident(identifier: string, password: string) {
@@ -234,6 +289,35 @@ export function updateResidentProfile(token: string, input: {
   email?: string;
   neighbourhood?: string;
   memberCategory?: string;
+  registrationType?: 'INDIVIDUAL' | 'FAMILY';
+  householdRole?: 'TENANT' | 'LANDLORD' | 'AGENT';
+  streetName?: string;
+  inventoryNumber?: string;
+  residentialAddress?: string;
+  residencyType?: string;
+  householdSize?: number;
+  lengthOfStay?: string;
+  landlordName?: string;
+  landlordPhone?: string;
+  buildingType?: string;
+  householdsInPremises?: number;
+  ownershipStatus?: string;
+  constructionYear?: string;
+  occupation?: string;
+  businessAddress?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  securityProvider?: string;
+  securityPhone?: string;
+  securityArrangement?: string;
+  hasCctv?: boolean;
+  hasSecurityLights?: boolean;
+  powerSources?: string[];
+  waterSources?: string[];
+  wasteDisposalMethods?: string[];
+  enumerationDate?: string;
+  enumeratorName?: string;
+  enumeratorPhone?: string;
 }) {
   return apiRequest<{ resident: ResidentProfile; requiresReApproval?: boolean }>('/api/auth/resident/me', {
     method: 'PATCH',
@@ -245,6 +329,7 @@ export function updateResidentProfile(token: string, input: {
       fullName: input.fullName?.trim() || undefined,
       neighbourhood: input.neighbourhood?.trim() || undefined,
       memberCategory: input.memberCategory?.trim() || undefined,
+      ...input,
     }),
   });
 }
@@ -455,6 +540,13 @@ export interface Dependant {
   fullName: string;
   relationship: string;
   phone: string | null;
+  dateOfBirth: string | null;
+  isMinor: boolean;
+  membershipId: string;
+  qrToken: string;
+  cardStatus: CardStatus;
+  cardIssuedAt: string | null;
+  cardExpiresAt: string | null;
   approvalStatus: ApprovalStatus;
   statusReason: string | null;
   statusChangedAt: string | null;
@@ -476,7 +568,7 @@ export function getDependants(token: string) {
 
 export function createDependant(
   token: string,
-  input: { fullName: string; relationship: string; phone?: string },
+  input: { fullName: string; relationship: string; phone?: string; dateOfBirth?: string; isMinor: boolean },
 ) {
   return apiRequest<{ dependant: Dependant }>('/api/dependants', {
     method: 'POST',
@@ -488,7 +580,7 @@ export function createDependant(
 export function updateDependant(
   token: string,
   id: string,
-  input: { fullName?: string; relationship?: string; phone?: string },
+  input: { fullName?: string; relationship?: string; phone?: string; dateOfBirth?: string; isMinor?: boolean },
 ) {
   return apiRequest<{ dependant: Dependant }>(`/api/dependants/${id}`, {
     method: 'PATCH',
@@ -516,6 +608,8 @@ export interface MerchantProfile {
   phone: string;
   email: string | null;
   location: string;
+  streetName: string | null;
+  associationName: string | null;
   approvalStatus: ApprovalStatus;
   statusReason: string | null;
   statusChangedAt: string | null;
@@ -526,6 +620,7 @@ export interface MerchantUserProfile {
   id: string;
   role: MerchantUserRole;
   isActive: boolean;
+  canScanCards: boolean;
   user: {
     id: string;
     phone: string;
@@ -537,6 +632,17 @@ export interface MerchantUserProfile {
       status: CardStatus;
       issuedAt: string;
       expiresAt: string | null;
+    } | null;
+    resident: {
+      approvalStatus: ApprovalStatus;
+      associationConfirmedAt: string | null;
+      card: {
+        membershipId: string;
+        qrToken: string;
+        status: CardStatus;
+        issuedAt: string | null;
+        expiresAt: string | null;
+      } | null;
     } | null;
   };
   merchant: MerchantProfile;
@@ -604,6 +710,8 @@ export function registerMerchant(input: {
   phone: string;
   email?: string;
   location: string;
+  streetName: string;
+  associationName: string;
   password: string;
   consent: boolean;
 }) {
@@ -655,6 +763,17 @@ export function deactivateMerchantStaff(token: string, userId: string) {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   });
+}
+
+export function setMerchantStaffScanPermission(token: string, userId: string, canScanCards: boolean) {
+  return apiRequest<{ merchantUser: MerchantUserProfile }>(
+    `/api/merchant-auth/staff/${userId}/scan-permission`,
+    {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ canScanCards }),
+    },
+  );
 }
 
 export function adminListMerchants(token: string, status?: ApprovalStatus | 'ALL', query?: string) {

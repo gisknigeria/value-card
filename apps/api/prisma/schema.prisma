@@ -109,7 +109,39 @@ model Resident {
   user             User           @relation(fields: [userId], references: [id])
   fullName         String
   neighbourhood    String
+  streetName       String?
+  inventoryNumber  String?        @unique
+  residentialAddress String?
+  residencyType    String?
+  householdSize    Int?
+  lengthOfStay     String?
+  landlordName     String?
+  landlordPhone    String?
+  buildingType     String?
+  buildingTypeOther String?
+  householdsInPremises Int?
+  ownershipStatus  String?
+  constructionYear String?
+  occupation       String?
+  businessAddress  String?
+  emergencyContactName String?
+  emergencyContactPhone String?
+  securityProvider String?
+  securityPhone    String?
+  securityArrangement String?
+  hasCctv          Boolean?
+  hasSecurityLights Boolean?
+  powerSources     String[]        @default([])
+  waterSources     String[]        @default([])
+  wasteDisposalMethods String[]    @default([])
+  enumerationDate  DateTime?
+  enumeratorName   String?
+  enumeratorPhone  String?
+  associationConfirmedAt DateTime?
+  associationConfirmedBy String?
   memberCategory   String
+  registrationType String         @default("INDIVIDUAL")
+  householdRole    String?
   approvalStatus   ApprovalStatus @default(PENDING)
   statusReason     String?
   statusChangedAt  DateTime?
@@ -128,6 +160,27 @@ model Resident {
   visitorPasses    VisitorPass[]
 }
 
+model Association {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  chairmanName  String?
+  chairmanPhone String?
+  streets       AssociationStreet[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model AssociationStreet {
+  id            String      @id @default(cuid())
+  name          String
+  associationId String?
+  association   Association? @relation(fields: [associationId], references: [id])
+  createdAt     DateTime    @default(now())
+
+  @@unique([name, associationId])
+  @@index([associationId])
+}
+
 model Dependant {
   id              String         @id @default(cuid())
   residentId      String
@@ -135,6 +188,13 @@ model Dependant {
   fullName        String
   relationship    String
   phone           String?
+  dateOfBirth     DateTime?
+  isMinor         Boolean        @default(false)
+  membershipId    String         @unique
+  qrToken         String         @unique
+  cardStatus      CardStatus     @default(PENDING_VERIFICATION)
+  cardIssuedAt    DateTime?
+  cardExpiresAt   DateTime?
   approvalStatus  ApprovalStatus @default(PENDING)
   statusReason    String?
   statusChangedAt DateTime?
@@ -166,6 +226,8 @@ model Merchant {
   phone           String
   email           String?
   location        String
+  streetName      String?
+  associationName String?
   approvalStatus  ApprovalStatus    @default(PENDING)
   statusReason    String?
   statusChangedAt DateTime?
@@ -187,6 +249,7 @@ model MerchantUser {
   merchantId String
   role       MerchantUserRole @default(OWNER)
   isActive   Boolean          @default(true)
+  canScanCards Boolean        @default(false)
   user       User             @relation(fields: [userId], references: [id])
   merchant   Merchant         @relation(fields: [merchantId], references: [id])
 

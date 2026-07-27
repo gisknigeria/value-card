@@ -13,6 +13,11 @@ type AuthenticatedRequest = Request & { user: { userId: string; role: string } }
 export class AuthController {
   constructor(@Inject(AuthService) private readonly auth: AuthService) {}
 
+  @Get('resident/directory')
+  directory() {
+    return this.auth.getResidentDirectory();
+  }
+
   @Post('resident/register')
   registerResident(@Body() input: RegisterResidentDto) {
     return this.auth.registerResident(input);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   AlertTriangle,
   BadgeCheck,
@@ -38,6 +38,7 @@ import {
   listMerchantStaff,
   inviteMerchantStaff,
   deactivateMerchantStaff,
+  setMerchantStaffScanPermission,
   listMerchantOffers,
   createMerchantOffer,
   updateMerchantOffer,
@@ -53,6 +54,7 @@ import {
   getMerchantReport,
   getMerchantWalkIns,
   acknowledgeWalkIn,
+  getResidentDirectory,
   type MerchantSession,
   type MerchantUserProfile,
   type MerchantOffer,
@@ -63,6 +65,7 @@ import {
   type MerchantTransaction,
   type MerchantReport,
   type WalkInLog,
+  type ResidentDirectory,
 } from './api';
 
 const MERCHANT_TOKEN_KEY = 'bodija-merchant-token';
@@ -112,8 +115,17 @@ function MerchantRegister({ onSwitch, onAuth }: {
 }) {
   const [form, setForm] = useState({
     businessName: '', category: '', contactPerson: '', phone: '',
-    email: '', location: '', password: '', consent: false,
+    email: '', location: '', streetName: '', associationName: '', streetSelection: '',
+    password: '', consent: false,
   });
+  const [directory, setDirectory] = useState<ResidentDirectory | null>(null);
+  useEffect(() => { getResidentDirectory().then(setDirectory).catch(() => {}); }, []);
+  const streetOptions = useMemo(
+    () => [
+      ...(directory?.associations.flatMap(a => a.streets.map(s => ({ street: s.name, association: a.name }))) || []),
+    ].sort((a, b) => a.street.localeCompare(b.street)),
+    [directory],
+  );
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -132,6 +144,8 @@ function MerchantRegister({ onSwitch, onAuth }: {
         phone: form.phone,
         email: form.email || undefined,
         location: form.location,
+        streetName: form.streetName,
+        associationName: form.associationName,
         password: form.password,
         consent: form.consent,
       });
@@ -192,6 +206,25 @@ function MerchantRegister({ onSwitch, onAuth }: {
             </div>
             <label><span>Location / service area</span>
               <div className="auth-input"><MapPin size={18} /><input required value={form.location} onChange={e => set('location', e.target.value)} placeholder="e.g. Awolowo Avenue, Bodija" /></div>
+            </label>
+            <label><span>Business street and association</span>
+              <div className="auth-input"><MapPin size={18} /><select required value={form.streetSelection} onChange={e => {
+                const selected = streetOptions[Number(e.target.value)];
+                setForm(current => ({
+                  ...current,
+                  streetSelection: e.target.value,
+                  streetName: selected?.street || '',
+                  associationName: selected?.association || '',
+                }));
+              }}>
+                <option value="">Select business street</option>
+                {streetOptions.map((item, index) => (
+                  <option key={`${item.street}-${item.association}-${index}`} value={index}>
+                    {item.street}{item.association ? ` — ${item.association}` : ''}
+                  </option>
+                ))}
+              </select></div>
+              {form.associationName && <small>Approval will go to <strong>{form.associationName}</strong>.</small>}
             </label>
             <label><span>Password</span>
               <div className="auth-input">
@@ -347,6 +380,7 @@ function StaffPanel({ token, isOwner }: { token: string; isOwner: boolean }) {
   const [inviting, setInviting] = useState(false);
   const [inviteError, setInviteError] = useState('');
   const [removingId, setRemovingId] = useState('');
+  const [permissionId, setPermissionId] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -381,6 +415,17 @@ function StaffPanel({ token, isOwner }: { token: string; isOwner: boolean }) {
     finally { setRemovingId(''); }
   };
 
+  const changeScanPermission = async (person: MerchantUserProfile, allowed: boolean) => {
+    setPermissionId(person.user.id); setError('');
+    try {
+      await setMerchantStaffScanPermission(token, person.user.id, allowed);
+      setStaff(items => items.map(item =>
+        item.user.id === person.user.id ? { ...item, canScanCards: allowed } : item,
+      ));
+    } catch (e) { setError(e instanceof Error ? e.message : 'Unable to update scan permission'); }
+    finally { setPermissionId(''); }
+  };
+
   return (
     <section className="profile-form" style={{ marginTop: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
@@ -392,7 +437,7 @@ function StaffPanel({ token, isOwner }: { token: string; isOwner: boolean }) {
         )}
       </div>
       <p style={{ color: 'var(--muted)', fontSize: 12, margin: '0 0 14px' }}>
-        Staff can log transactions and verify residents. Only owners can manage staff accounts.
+        Staff receive personal entry cards. Scanning is disabled unless an owner grants permission.
       </p>
 
       {showInvite && (
@@ -450,6 +495,17 @@ function StaffPanel({ token, isOwner }: { token: string; isOwner: boolean }) {
                 {s.isActive ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
                 <span>{s.isActive ? 'Active' : 'Deactivated'}</span>
               </div>
+              {s.role === 'STAFF' && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 7, fontSize: 12 }}>
+                  <input
+                    type="checkbox"
+                    checked={s.canScanCards}
+                    disabled={!isOwner || !s.isActive || permissionId === s.user.id}
+                    onChange={e => void changeScanPermission(s, e.target.checked)}
+                  />
+                  Allow this staff member to scan cards
+                </label>
+              )}
             </div>
             {isOwner && s.isActive && (
               <div className="dependant-actions">
@@ -1111,6 +1167,7 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
   const mu = session.merchantUser;
   const m = mu.merchant;
   const isOwner = mu.role === 'OWNER';
+  const canScanCards = isOwner || mu.canScanCards;
   const isApproved = m.approvalStatus === 'APPROVED';
   const socketRef = useRef<any>(null);
 
@@ -1189,7 +1246,7 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
           <button className={view === 'card' ? 'active' : ''} onClick={() => setView('card')}>
             <QrCode size={16} /> My card
           </button>
-          {isOwner && isApproved && (
+          {canScanCards && isApproved && (
             <button className={view === 'scan' ? 'active' : ''} onClick={() => setView('scan')}>
               <ShieldCheck size={16} /> Scan & log
             </button>
@@ -1244,7 +1301,10 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
 }
 
 function RoleAccessCard({ mu }: { mu: MerchantUserProfile }) {
-  const card = mu.user.accessCard;
+  const eligibility = mu.user.resident;
+  const card = eligibility?.approvalStatus === 'APPROVED' && eligibility.card?.status === 'ACTIVE'
+    ? eligibility.card
+    : null;
   const name = mu.user.displayName || (mu.role === 'OWNER' ? mu.merchant.contactPerson : 'Merchant staff');
   return (
     <section className="admin-workspace" style={{ marginTop: 24, padding: 24, maxWidth: 560 }}>
@@ -1255,9 +1315,9 @@ function RoleAccessCard({ mu }: { mu: MerchantUserProfile }) {
           <p style={{ margin: 0, color: 'var(--muted)' }}>
             Merchant {mu.role === 'OWNER' ? 'owner' : 'staff'} · {mu.merchant.businessName}
           </p>
-          <strong style={{ display: 'block', marginTop: 18 }}>{card?.cardNumber || 'Card being issued'}</strong>
+          <strong style={{ display: 'block', marginTop: 18 }}>{card?.membershipId || 'Awaiting association approval'}</strong>
           <span className={`dependant-status-badge ${card?.status === 'ACTIVE' ? 'status-approved' : 'status-pending'}`} style={{ marginTop: 8 }}>
-            {card?.status?.toLowerCase().replace(/_/g, ' ') || 'pending'}
+            {card?.status?.toLowerCase().replace(/_/g, ' ') || 'pending approval'}
           </span>
         </div>
         <div style={{ background: '#fff', borderRadius: 16, padding: 14, minWidth: 156, minHeight: 156, display: 'grid', placeItems: 'center' }}>
@@ -1265,7 +1325,9 @@ function RoleAccessCard({ mu }: { mu: MerchantUserProfile }) {
         </div>
       </div>
       <p style={{ margin: '20px 0 0', color: 'var(--muted)', fontSize: 12 }}>
-        Present this personal QR card at the gate. It identifies this account holder and is not a resident membership card.
+        {card
+          ? 'Use this personal benefit card at participating merchants and present it for gate identification.'
+          : `Your QR code and card will appear after ${mu.merchant.associationName || 'your association'} confirms your profile.`}
       </p>
     </section>
   );
@@ -1287,7 +1349,7 @@ function MerchantOverview({ m, isApproved, isOwner, setView, pendingWalkIns }: {
           <h3 style={{ fontSize: 16, marginBottom: 8 }}>Merchant staff access</h3>
           <p style={{ color: 'var(--muted)', fontSize: 13, maxWidth: 520 }}>
             Your account is an identity and gate-access account for {m.businessName}. Scanning resident cards
-            and merchant operations are restricted to the merchant owner.
+            and merchant operations are restricted unless the owner grants you scan permission.
           </p>
           <button className="primary-button" onClick={() => setView('card')} style={{ marginTop: 10 }}>
             <QrCode size={16} /> View my entry card
@@ -1492,6 +1554,40 @@ function WalkInsPanel({ token, merchantId }: { token: string; merchantId: string
 
 // ── Profile panel ─────────────────────────────────────────────────────
 function MerchantProfile({ m, mu }: { m: MerchantUserProfile['merchant']; mu: MerchantUserProfile }) {
+  const isOwner = mu.role === 'OWNER';
+  const personalName = mu.user.displayName || (isOwner ? m.contactPerson : 'Merchant staff');
+  const initials = personalName.split(/\s+/).slice(0, 2).map(p => p[0]).join('').toUpperCase();
+  if (!isOwner) {
+    const personalDetails = [
+      { label: 'Full name', value: personalName },
+      { label: 'Phone', value: mu.user.phone },
+      { label: 'Email', value: mu.user.email || '—' },
+      { label: 'Account type', value: 'Merchant staff' },
+      { label: 'Workplace', value: m.businessName },
+      { label: 'Scan permission', value: mu.canScanCards ? 'Granted by owner' : 'Not granted' },
+    ];
+    return (
+      <section className="profile-form" style={{ marginTop: 24 }}>
+        <div className="profile-summary" style={{ padding: 0, marginBottom: 16 }}>
+          <div className="admin-avatar" style={{ width: 52, height: 52, fontSize: 16, borderRadius: 8, background: '#e8d6b4', color: '#845f2e', flexShrink: 0 }}>
+            {initials}
+          </div>
+          <div>
+            <h2 style={{ fontSize: 20, marginBottom: 3 }}>{personalName}</h2>
+            <p style={{ color: 'var(--muted)', fontSize: 12, margin: 0 }}>{m.businessName} · Sales staff</p>
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          {personalDetails.map(({ label, value }) => (
+            <div key={label}>
+              <p style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 3px' }}>{label}</p>
+              <p style={{ fontSize: 13, margin: 0, fontWeight: 500 }}>{value}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="profile-form" style={{ marginTop: 24 }}>
       <div className="profile-summary" style={{ padding: 0, marginBottom: 16 }}>

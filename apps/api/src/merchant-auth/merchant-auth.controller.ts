@@ -72,6 +72,21 @@ export class MerchantAuthController {
   deactivateStaff(@Req() req: AuthRequest, @Param('userId') userId: string) {
     return this.svc.deactivateStaff(req.user.userId, req.user.merchantId!, userId);
   }
+
+  @UseGuards(JwtAuthGuard, MerchantGuard)
+  @Patch('staff/:userId/scan-permission')
+  setScanPermission(
+    @Req() req: AuthRequest,
+    @Param('userId') userId: string,
+    @Body('canScanCards') canScanCards: boolean,
+  ) {
+    return this.svc.setStaffScanPermission(
+      req.user.userId,
+      req.user.merchantId!,
+      userId,
+      canScanCards === true,
+    );
+  }
 }
 
 // ── Admin merchant management routes ──────────────────────────────────
@@ -84,8 +99,9 @@ export class AdminMerchantController {
   list(
     @Query('status') status?: ApprovalStatus,
     @Query('query') query?: string,
+    @Req() req?: AuthRequest,
   ) {
-    return this.svc.adminListMerchants(status, query);
+    return this.svc.adminListMerchants(status, query, req!.user.userId);
   }
 
   @Patch(':merchantId/status')

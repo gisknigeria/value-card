@@ -264,7 +264,9 @@ function ApprovalTimeline({ resident }: { resident: ResidentProfile }) {
 }
 
 function ValueCard({ resident, compact = false, cardRef }: { resident: ResidentProfile; compact?: boolean; cardRef?: React.RefObject<HTMLDivElement | null> }) {
-  const card = resident.card;
+  const card = resident.approvalStatus === 'APPROVED' && resident.card?.status === 'ACTIVE'
+    ? resident.card
+    : null;
   const isActive = card?.status === 'ACTIVE';
   return (
     <div className={`value-card ${compact ? 'compact' : ''}`} ref={cardRef}>
@@ -670,6 +672,35 @@ function ProfilePage({ resident, token, onProfileUpdated }: { resident: Resident
     email: resident.user.email || '',
     neighbourhood: resident.neighbourhood,
     memberCategory: resident.memberCategory,
+    registrationType: resident.registrationType,
+    householdRole: resident.householdRole || 'TENANT',
+    streetName: resident.streetName || '',
+    inventoryNumber: resident.inventoryNumber || '',
+    residentialAddress: resident.residentialAddress || '',
+    residencyType: resident.residencyType || '',
+    householdSize: resident.householdSize || 0,
+    lengthOfStay: resident.lengthOfStay || '',
+    landlordName: resident.landlordName || '',
+    landlordPhone: resident.landlordPhone || '',
+    buildingType: resident.buildingType || '',
+    householdsInPremises: resident.householdsInPremises || 0,
+    ownershipStatus: resident.ownershipStatus || '',
+    constructionYear: resident.constructionYear || '',
+    occupation: resident.occupation || '',
+    businessAddress: resident.businessAddress || '',
+    emergencyContactName: resident.emergencyContactName || '',
+    emergencyContactPhone: resident.emergencyContactPhone || '',
+    securityProvider: resident.securityProvider || '',
+    securityPhone: resident.securityPhone || '',
+    securityArrangement: resident.securityArrangement || '',
+    hasCctv: resident.hasCctv ?? false,
+    hasSecurityLights: resident.hasSecurityLights ?? false,
+    powerSources: resident.powerSources.join(', '),
+    waterSources: resident.waterSources.join(', '),
+    wasteDisposalMethods: resident.wasteDisposalMethods.join(', '),
+    enumerationDate: resident.enumerationDate?.slice(0, 10) || '',
+    enumeratorName: resident.enumeratorName || '',
+    enumeratorPhone: resident.enumeratorPhone || '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -688,7 +719,15 @@ function ProfilePage({ resident, token, onProfileUpdated }: { resident: Resident
     setSuccessMessage(null);
 
     try {
-      const { resident: updatedResident, requiresReApproval } = await updateResidentProfile(token, form);
+      const { resident: updatedResident, requiresReApproval } = await updateResidentProfile(token, {
+        ...form,
+        householdSize: form.householdSize || undefined,
+        householdsInPremises: form.householdsInPremises || undefined,
+        powerSources: form.powerSources.split(',').map(v => v.trim()).filter(Boolean),
+        waterSources: form.waterSources.split(',').map(v => v.trim()).filter(Boolean),
+        wasteDisposalMethods: form.wasteDisposalMethods.split(',').map(v => v.trim()).filter(Boolean),
+        enumerationDate: form.enumerationDate || undefined,
+      });
       onProfileUpdated(updatedResident);
       setSuccessMessage(
         requiresReApproval
@@ -776,6 +815,63 @@ function ProfilePage({ resident, token, onProfileUpdated }: { resident: Resident
             />
           </div>
         </label>
+        <div className="auth-field-row">
+          <label><span>Registration type</span><div className="auth-input"><select value={form.registrationType} onChange={e => setForm(f => ({ ...f, registrationType: e.target.value as 'INDIVIDUAL' | 'FAMILY' }))}><option value="INDIVIDUAL">Individual</option><option value="FAMILY">Family</option></select></div></label>
+          <label><span>Household role</span><div className="auth-input"><select value={form.householdRole} onChange={e => setForm(f => ({ ...f, householdRole: e.target.value as 'TENANT' | 'LANDLORD' | 'AGENT' }))}><option value="TENANT">Tenant</option><option value="LANDLORD">Landlord</option><option value="AGENT">Agent</option></select></div></label>
+        </div>
+        <h3 style={{ marginTop: 18 }}>Household and address</h3>
+        <div className="auth-field-row">
+          <label><span>Inventory number</span><div className="auth-input"><input value={form.inventoryNumber} onChange={e => setForm(f => ({ ...f, inventoryNumber: e.target.value }))} /></div></label>
+          <label><span>Street name</span><div className="auth-input"><input value={form.streetName} onChange={e => setForm(f => ({ ...f, streetName: e.target.value }))} /></div></label>
+        </div>
+        <label><span>Residential address</span><div className="auth-input"><input value={form.residentialAddress} onChange={e => setForm(f => ({ ...f, residentialAddress: e.target.value }))} /></div></label>
+        <div className="auth-field-row">
+          <label><span>Residency type</span><div className="auth-input"><select value={form.residencyType} onChange={e => setForm(f => ({ ...f, residencyType: e.target.value }))}><option value="">Select</option><option>Landlord</option><option>Tenant</option></select></div></label>
+          <label><span>Residents in household</span><div className="auth-input"><input type="number" min="1" value={form.householdSize || ''} onChange={e => setForm(f => ({ ...f, householdSize: Number(e.target.value) }))} /></div></label>
+        </div>
+        <div className="auth-field-row">
+          <label><span>Length of stay</span><div className="auth-input"><input value={form.lengthOfStay} onChange={e => setForm(f => ({ ...f, lengthOfStay: e.target.value }))} placeholder="e.g. 8 years" /></div></label>
+          <label><span>Building type</span><div className="auth-input"><select value={form.buildingType} onChange={e => setForm(f => ({ ...f, buildingType: e.target.value }))}><option value="">Select</option><option>Bungalow</option><option>Duplex</option><option>Multi-Floor</option><option>Apartment</option><option>Other</option></select></div></label>
+        </div>
+        <div className="auth-field-row">
+          <label><span>Landlord name</span><div className="auth-input"><input value={form.landlordName} onChange={e => setForm(f => ({ ...f, landlordName: e.target.value }))} /></div></label>
+          <label><span>Landlord phone</span><div className="auth-input"><input value={form.landlordPhone} onChange={e => setForm(f => ({ ...f, landlordPhone: e.target.value }))} /></div></label>
+        </div>
+        <div className="auth-field-row">
+          <label><span>Households in premises</span><div className="auth-input"><input type="number" min="1" value={form.householdsInPremises || ''} onChange={e => setForm(f => ({ ...f, householdsInPremises: Number(e.target.value) }))} /></div></label>
+          <label><span>Ownership status</span><div className="auth-input"><select value={form.ownershipStatus} onChange={e => setForm(f => ({ ...f, ownershipStatus: e.target.value }))}><option value="">Select</option><option>Owned</option><option>Rented</option><option>Company Property</option><option>Family House</option></select></div></label>
+        </div>
+        <h3 style={{ marginTop: 18 }}>Occupation and emergency contact</h3>
+        <div className="auth-field-row">
+          <label><span>Occupation / profession</span><div className="auth-input"><input value={form.occupation} onChange={e => setForm(f => ({ ...f, occupation: e.target.value }))} /></div></label>
+          <label><span>Office / business address</span><div className="auth-input"><input value={form.businessAddress} onChange={e => setForm(f => ({ ...f, businessAddress: e.target.value }))} /></div></label>
+        </div>
+        <div className="auth-field-row">
+          <label><span>Emergency contact name</span><div className="auth-input"><input value={form.emergencyContactName} onChange={e => setForm(f => ({ ...f, emergencyContactName: e.target.value }))} /></div></label>
+          <label><span>Emergency contact phone</span><div className="auth-input"><input value={form.emergencyContactPhone} onChange={e => setForm(f => ({ ...f, emergencyContactPhone: e.target.value }))} /></div></label>
+        </div>
+        <h3 style={{ marginTop: 18 }}>Security and utilities</h3>
+        <div className="auth-field-row">
+          <label><span>Security provider/personnel</span><div className="auth-input"><input value={form.securityProvider} onChange={e => setForm(f => ({ ...f, securityProvider: e.target.value }))} /></div></label>
+          <label><span>Security phone</span><div className="auth-input"><input value={form.securityPhone} onChange={e => setForm(f => ({ ...f, securityPhone: e.target.value }))} /></div></label>
+        </div>
+        <div className="auth-field-row">
+          <label><span>Security arrangement</span><div className="auth-input"><select value={form.securityArrangement} onChange={e => setForm(f => ({ ...f, securityArrangement: e.target.value }))}><option value="">Select</option><option>Individual</option><option>Shared</option><option>Estate-wide</option><option>Outsourced Company</option></select></div></label>
+          <label><span>Year built / renovated</span><div className="auth-input"><input value={form.constructionYear} onChange={e => setForm(f => ({ ...f, constructionYear: e.target.value }))} /></div></label>
+        </div>
+        <div style={{ display: 'flex', gap: 20, margin: '10px 0' }}>
+          <label><input type="checkbox" checked={form.hasCctv} onChange={e => setForm(f => ({ ...f, hasCctv: e.target.checked }))} /> CCTV installed</label>
+          <label><input type="checkbox" checked={form.hasSecurityLights} onChange={e => setForm(f => ({ ...f, hasSecurityLights: e.target.checked }))} /> Security lights</label>
+        </div>
+        <label><span>Power sources (comma separated)</span><div className="auth-input"><input value={form.powerSources} onChange={e => setForm(f => ({ ...f, powerSources: e.target.value }))} placeholder="PHCN, Solar, Generator" /></div></label>
+        <label><span>Water sources (comma separated)</span><div className="auth-input"><input value={form.waterSources} onChange={e => setForm(f => ({ ...f, waterSources: e.target.value }))} placeholder="Borehole, Public Supply" /></div></label>
+        <label><span>Waste disposal methods</span><div className="auth-input"><input value={form.wasteDisposalMethods} onChange={e => setForm(f => ({ ...f, wasteDisposalMethods: e.target.value }))} /></div></label>
+        <h3 style={{ marginTop: 18 }}>Enumeration</h3>
+        <div className="auth-field-row">
+          <label><span>Date of enumeration</span><div className="auth-input"><input type="date" value={form.enumerationDate} onChange={e => setForm(f => ({ ...f, enumerationDate: e.target.value }))} /></div></label>
+          <label><span>Enumerator name</span><div className="auth-input"><input value={form.enumeratorName} onChange={e => setForm(f => ({ ...f, enumeratorName: e.target.value }))} /></div></label>
+        </div>
+        <label><span>Enumerator phone</span><div className="auth-input"><input value={form.enumeratorPhone} onChange={e => setForm(f => ({ ...f, enumeratorPhone: e.target.value }))} /></div></label>
         <div className="profile-actions">
           <button className="primary-button" type="submit" disabled={saving}>
             {saving ? 'Saving…' : 'Save profile'}
@@ -787,8 +883,8 @@ function ProfilePage({ resident, token, onProfileUpdated }: { resident: Resident
 }
 
 // ── Dependants page ────────────────────────────────────────────────────
-type DependantFormState = { fullName: string; relationship: string; phone: string };
-const EMPTY_FORM: DependantFormState = { fullName: '', relationship: '', phone: '' };
+type DependantFormState = { fullName: string; relationship: string; phone: string; dateOfBirth: string; isMinor: boolean };
+const EMPTY_FORM: DependantFormState = { fullName: '', relationship: '', phone: '', dateOfBirth: '', isMinor: false };
 
 function dependantStatusTone(status: string) {
   if (status === 'APPROVED') return 'timeline-approved';
@@ -831,7 +927,13 @@ function DependantsPage({ token }: { token: string }) {
   const openEdit = (d: Dependant) => {
     if (d.approvalStatus === 'APPROVED') return; // blocked — approved are read-only
     setEditingId(d.id);
-    setForm({ fullName: d.fullName, relationship: d.relationship, phone: d.phone ?? '' });
+    setForm({
+      fullName: d.fullName,
+      relationship: d.relationship,
+      phone: d.phone ?? '',
+      dateOfBirth: d.dateOfBirth?.slice(0, 10) || '',
+      isMinor: d.isMinor,
+    });
     setFormError(null);
     setShowForm(true);
   };
@@ -850,6 +952,8 @@ function DependantsPage({ token }: { token: string }) {
         fullName: form.fullName.trim(),
         relationship: form.relationship.trim(),
         phone: form.phone.trim() || undefined,
+        dateOfBirth: form.dateOfBirth || undefined,
+        isMinor: form.isMinor,
       };
       if (editingId) {
         const { dependant } = await updateDependant(token, editingId, payload);
@@ -888,7 +992,7 @@ function DependantsPage({ token }: { token: string }) {
           <h2>Dependants</h2>
           <p>
             Add household members who share your resident status. Approved dependants
-            can be verified at community gates through your resident card.
+            receive their own cards, including minors.
           </p>
         </div>
         <button className="primary-button" onClick={openAdd}>
@@ -916,7 +1020,7 @@ function DependantsPage({ token }: { token: string }) {
             <p>
               {editingId
                 ? 'Update the details below. The dependant will be re-submitted for BERA review.'
-                : 'Dependants are verified through your card. BERA must approve each one.'}
+                : 'Each family member receives a separate card after association approval.'}
             </p>
             <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {formError && <div className="auth-error" role="alert">{formError}</div>}
@@ -957,6 +1061,15 @@ function DependantsPage({ token }: { token: string }) {
                   />
                 </div>
               </label>
+              <div className="auth-field-row">
+                <label>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#2a4454', display: 'block', marginBottom: 6 }}>Date of birth</span>
+                  <div className="auth-input"><input type="date" value={form.dateOfBirth} onChange={e => setForm(f => ({ ...f, dateOfBirth: e.target.value }))} /></div>
+                </label>
+                <label style={{ alignSelf: 'end', paddingBottom: 12 }}>
+                  <input type="checkbox" checked={form.isMinor} onChange={e => setForm(f => ({ ...f, isMinor: e.target.checked }))} /> Minor
+                </label>
+              </div>
               <div className="modal-actions">
                 <button type="button" className="secondary-button" onClick={closeForm}>Cancel</button>
                 <button type="submit" className="primary-button" disabled={saving}>
@@ -999,6 +1112,12 @@ function DependantsPage({ token }: { token: string }) {
                     <p className="dependant-reason">{d.statusReason}</p>
                   )}
                 </div>
+                {isApproved && d.cardStatus === 'ACTIVE' && (
+                  <div style={{ background: '#fff', padding: 8, borderRadius: 8, textAlign: 'center' }}>
+                    <QRCode value={d.qrToken} size={72} bgColor="#ffffff" fgColor="#12344d" />
+                    <small style={{ display: 'block', marginTop: 4 }}>{d.membershipId}</small>
+                  </div>
+                )}
                 <div className="dependant-actions">
                   {!isApproved && (
                     <button

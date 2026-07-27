@@ -20,22 +20,52 @@ const LEDGER_REVERSAL = 'REVERSAL';
 export class TransactionsService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
-  // ── Card lookup for merchant scanner ─────────────────────────────────
-  async lookupCard(cardToken: string, merchantId: string, staffUserId: string, deviceInfo?: string, idempotencyKey?: string) {
-    const card = await this.prisma.card.findFirst({
-      where: { OR: [{ qrToken: cardToken }, { membershipId: cardToken }] },
+  private async resolveBenefitCard(token: string) {
+    const primary = await this.prisma.card.findFirst({
+      where: { OR: [{ qrToken: token }, { membershipId: token }] },
       include: {
         resident: {
           select: {
-            id: true,
-            fullName: true,
-            neighbourhood: true,
-            memberCategory: true,
-            approvalStatus: true,
+            id: true, fullName: true, neighbourhood: true,
+            memberCategory: true, approvalStatus: true,
           },
         },
       },
     });
+    if (primary) {
+      return {
+        scanCardId: primary.id,
+        residentId: primary.resident.id,
+        fullName: primary.resident.fullName,
+        neighbourhood: primary.resident.neighbourhood,
+        memberCategory: primary.resident.memberCategory,
+        approvalStatus: primary.resident.approvalStatus,
+        membershipId: primary.membershipId,
+        status: primary.status,
+        expiresAt: primary.expiresAt,
+      };
+    }
+    const family = await this.prisma.dependant.findFirst({
+      where: { OR: [{ qrToken: token }, { membershipId: token }] },
+      include: { resident: { select: { id: true, neighbourhood: true } } },
+    });
+    if (!family) return null;
+    return {
+      scanCardId: null,
+      residentId: family.resident.id,
+      fullName: family.fullName,
+      neighbourhood: family.resident.neighbourhood,
+      memberCategory: family.isMinor ? 'Minor family member' : `Family member · ${family.relationship}`,
+      approvalStatus: family.approvalStatus,
+      membershipId: family.membershipId,
+      status: family.cardStatus,
+      expiresAt: family.cardExpiresAt,
+    };
+  }
+
+  // ── Card lookup for merchant scanner ─────────────────────────────────
+  async lookupCard(cardToken: string, merchantId: string, staffUserId: string, deviceInfo?: string, idempotencyKey?: string) {
+    const card = await this.resolveBenefitCard(cardToken);
 
     if (!card) throw new NotFoundException('Card not found');
 
@@ -57,13 +87,13 @@ export class TransactionsService {
       });
       if (existing) {
         return { allowed, status: effectiveStatus, result: existing.result, cached: true,
-          resident: { fullName: card.resident.fullName, membershipId: card.membershipId, memberCategory: card.resident.memberCategory, neighbourhood: card.resident.neighbourhood } };
+          resident: { fullName: card.fullName, membershipId: card.membershipId, memberCategory: card.memberCategory, neighbourhood: card.neighbourhood } };
       }
     }
 
-    await this.prisma.verificationScan.create({
+    if (card.scanCardId) await this.prisma.verificationScan.create({
       data: {
-        cardId: card.id,
+        cardId: card.scanCardId,
         verifierId: staffUserId,
         merchantId,
         staffUserId,
@@ -80,10 +110,10 @@ export class TransactionsService {
       expiresAt: card.expiresAt,
       cached: false,
       resident: {
-        fullName: card.resident.fullName,
+        fullName: card.fullName,
         membershipId: card.membershipId,
-        memberCategory: card.resident.memberCategory,
-        neighbourhood: card.resident.neighbourhood,
+        memberCategory: card.memberCategory,
+        neighbourhood: card.neighbourhood,
       },
     };
   }
@@ -99,10 +129,7 @@ export class TransactionsService {
     }
 
     // Resolve card → resident
-    const card = await this.prisma.card.findFirst({
-      where: { OR: [{ qrToken: input.cardToken }, { membershipId: input.cardToken }] },
-      select: { id: true, status: true, expiresAt: true, resident: { select: { id: true } } },
-    });
+    const card = await this.resolveBenefitCard(input.cardToken);
     if (!card) throw new NotFoundException('Card not found');
 
     const effectiveStatus =
@@ -135,7 +162,7 @@ export class TransactionsService {
     const transaction = await this.prisma.$transaction(async tx => {
       const txn = await tx.transaction.create({
         data: {
-          residentId:     card.resident.id,
+          residentId:     card.residentId,
           merchantId,
           offerId:        offer.id,
           loggedById:     staffUserId,
@@ -149,14 +176,14 @@ export class TransactionsService {
       // For accumulated offers — credit the merchant-specific reward balance
       if (offer.redemptionModel === RedemptionModel.ACCUMULATED) {
         await tx.rewardBalance.upsert({
-          where: { residentId_merchantId: { residentId: card.resident.id, merchantId } },
-          create: { residentId: card.resident.id, merchantId, balance: benefitValue },
+          where: { residentId_merchantId: { residentId: card.residentId, merchantId } },
+          create: { residentId: card.residentId, merchantId, balance: benefitValue },
           update: { balance: { increment: benefitValue } },
         });
 
         await tx.rewardLedger.create({
           data: {
-            residentId:    card.resident.id,
+            residentId:    card.residentId,
             merchantId,
             transactionId: txn.id,
             amount:        benefitValue,
@@ -174,17 +201,14 @@ export class TransactionsService {
 
   // ── Redeem accumulated reward balance ─────────────────────────────────
   async redeemReward(merchantId: string, staffUserId: string, input: RedeemRewardDto) {
-    const card = await this.prisma.card.findFirst({
-      where: { OR: [{ qrToken: input.cardToken }, { membershipId: input.cardToken }] },
-      select: { id: true, status: true, resident: { select: { id: true } } },
-    });
+    const card = await this.resolveBenefitCard(input.cardToken);
     if (!card) throw new NotFoundException('Card not found');
     if (card.status !== CardStatus.ACTIVE) throw new ForbiddenException('Card is not active');
 
     const redeemAmount = new Prisma.Decimal(input.amount);
 
     const rewardBalance = await this.prisma.rewardBalance.findUnique({
-      where: { residentId_merchantId: { residentId: card.resident.id, merchantId } },
+      where: { residentId_merchantId: { residentId: card.residentId, merchantId } },
     });
     if (!rewardBalance) throw new BadRequestException('No reward balance at this merchant');
     if (new Prisma.Decimal(rewardBalance.balance).lessThan(redeemAmount)) {
@@ -193,13 +217,13 @@ export class TransactionsService {
 
     const result = await this.prisma.$transaction(async tx => {
       const updated = await tx.rewardBalance.update({
-        where: { residentId_merchantId: { residentId: card.resident.id, merchantId } },
+        where: { residentId_merchantId: { residentId: card.residentId, merchantId } },
         data: { balance: { decrement: redeemAmount } },
       });
 
       await tx.rewardLedger.create({
         data: {
-          residentId: card.resident.id,
+          residentId: card.residentId,
           merchantId,
           amount:     redeemAmount.negated(),
           type:       LEDGER_DEBIT,

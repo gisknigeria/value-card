@@ -63,8 +63,9 @@ export class AdminDependantsController {
   list(
     @Query('status') status?: ApprovalStatus,
     @Query('query') query?: string,
+    @Req() req?: AuthRequest,
   ) {
-    return this.svc.adminList(status, query);
+    return this.svc.adminList(status, query, req!.user.userId);
   }
 
   @Patch(':id/status')

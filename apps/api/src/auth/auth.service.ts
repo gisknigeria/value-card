@@ -18,7 +18,38 @@ const residentSelect = {
   id: true,
   fullName: true,
   neighbourhood: true,
+  streetName: true,
+  inventoryNumber: true,
+  residentialAddress: true,
+  residencyType: true,
+  householdSize: true,
+  lengthOfStay: true,
+  landlordName: true,
+  landlordPhone: true,
+  buildingType: true,
+  buildingTypeOther: true,
+  householdsInPremises: true,
+  ownershipStatus: true,
+  constructionYear: true,
+  occupation: true,
+  businessAddress: true,
+  emergencyContactName: true,
+  emergencyContactPhone: true,
+  securityProvider: true,
+  securityPhone: true,
+  securityArrangement: true,
+  hasCctv: true,
+  hasSecurityLights: true,
+  powerSources: true,
+  waterSources: true,
+  wasteDisposalMethods: true,
+  enumerationDate: true,
+  enumeratorName: true,
+  enumeratorPhone: true,
+  associationConfirmedAt: true,
   memberCategory: true,
+  registrationType: true,
+  householdRole: true,
   approvalStatus: true,
   statusReason: true,
   statusChangedAt: true,
@@ -57,14 +88,46 @@ export class AuthService {
     @Inject(JwtService) private readonly jwt: JwtService,
   ) {}
 
+  async getResidentDirectory() {
+    const associations = await this.prisma.association.findMany({
+      orderBy: { name: 'asc' },
+      select: {
+        name: true,
+        chairmanName: true,
+        streets: { orderBy: { name: 'asc' }, select: { name: true } },
+      },
+    });
+    const unassignedStreets = await this.prisma.associationStreet.findMany({
+      where: { associationId: null },
+      orderBy: { name: 'asc' },
+      select: { name: true },
+    });
+    return { associations, unassignedStreets };
+  }
+
   async registerResident(input: RegisterResidentDto) {
     if (!input.consent) {
       throw new BadRequestException('Consent is required to create a resident account');
+    }
+    if (input.registrationType === 'FAMILY' && !input.familyMembers?.length) {
+      throw new BadRequestException('Add at least one family member for family registration');
     }
 
     const phone = input.phone.replace(/[\s-]/g, '');
     const email = input.email?.trim().toLowerCase() || null;
     const passwordHash = await bcrypt.hash(input.password, 12);
+    const matchedStreet = input.streetName?.trim()
+      ? await this.prisma.associationStreet.findFirst({
+          where: {
+            name: { equals: input.streetName.trim(), mode: 'insensitive' },
+            ...(input.neighbourhood?.trim()
+              ? { association: { name: { equals: input.neighbourhood.trim(), mode: 'insensitive' } } }
+              : {}),
+          },
+          include: { association: true },
+        })
+      : null;
+    const associationName = matchedStreet?.association?.name || input.neighbourhood?.trim() || '';
 
     try {
       const user = await this.prisma.user.create({
@@ -82,8 +145,11 @@ export class AuthService {
           resident: {
             create: {
               fullName: input.fullName?.trim() || '',
-              neighbourhood: input.neighbourhood?.trim() || '',
+              neighbourhood: associationName,
+              streetName: matchedStreet?.name || input.streetName?.trim() || null,
               memberCategory: input.memberCategory?.trim() || 'Resident member',
+              registrationType: input.registrationType,
+              householdRole: input.householdRole,
               consentedAt: new Date(),
               card: {
                 create: {
@@ -91,6 +157,19 @@ export class AuthService {
                   qrToken: `BVC-${randomBytes(24).toString('base64url')}`,
                 },
               },
+              dependants: input.registrationType === 'FAMILY' && input.familyMembers?.length
+                ? {
+                    create: input.familyMembers.map(member => ({
+                      fullName: member.fullName.trim(),
+                      relationship: member.relationship.trim(),
+                      phone: member.phone?.replace(/[\s-]/g, '') || null,
+                      dateOfBirth: member.dateOfBirth ? new Date(member.dateOfBirth) : null,
+                      isMinor: member.isMinor,
+                      membershipId: `BVC-FAM-${randomBytes(6).toString('hex').toUpperCase()}`,
+                      qrToken: `BVC-FAMILY-${randomBytes(24).toString('base64url')}`,
+                    })),
+                  }
+                : undefined,
             },
           },
         },
@@ -225,6 +304,36 @@ export class AuthService {
           fullName: input.fullName?.trim() || resident.fullName,
           neighbourhood: input.neighbourhood?.trim() || resident.neighbourhood,
           memberCategory: input.memberCategory?.trim() || resident.memberCategory,
+          registrationType: input.registrationType ?? resident.registrationType,
+          householdRole: input.householdRole ?? resident.householdRole,
+          streetName: input.streetName?.trim() || resident.streetName,
+          inventoryNumber: input.inventoryNumber?.trim() || null,
+          residentialAddress: input.residentialAddress?.trim() || null,
+          residencyType: input.residencyType?.trim() || null,
+          householdSize: input.householdSize,
+          lengthOfStay: input.lengthOfStay?.trim() || null,
+          landlordName: input.landlordName?.trim() || null,
+          landlordPhone: input.landlordPhone?.trim() || null,
+          buildingType: input.buildingType?.trim() || null,
+          buildingTypeOther: input.buildingTypeOther?.trim() || null,
+          householdsInPremises: input.householdsInPremises,
+          ownershipStatus: input.ownershipStatus?.trim() || null,
+          constructionYear: input.constructionYear?.trim() || null,
+          occupation: input.occupation?.trim() || null,
+          businessAddress: input.businessAddress?.trim() || null,
+          emergencyContactName: input.emergencyContactName?.trim() || null,
+          emergencyContactPhone: input.emergencyContactPhone?.trim() || null,
+          securityProvider: input.securityProvider?.trim() || null,
+          securityPhone: input.securityPhone?.trim() || null,
+          securityArrangement: input.securityArrangement?.trim() || null,
+          hasCctv: input.hasCctv,
+          hasSecurityLights: input.hasSecurityLights,
+          powerSources: input.powerSources,
+          waterSources: input.waterSources,
+          wasteDisposalMethods: input.wasteDisposalMethods,
+          enumerationDate: input.enumerationDate ? new Date(input.enumerationDate) : undefined,
+          enumeratorName: input.enumeratorName?.trim() || null,
+          enumeratorPhone: input.enumeratorPhone?.trim() || null,
         };
 
         // Re-approval: reset status to PENDING and suspend the card

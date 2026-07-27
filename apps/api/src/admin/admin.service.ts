@@ -112,6 +112,10 @@ export class AdminService {
   // ── Update resident status ─────────────────────────────────────────────
   async updateResidentStatus(residentId: string, status: ApprovalStatus, adminUserId: string, reason?: string) {
     const scope = await this.residentScope(adminUserId);
+    const approver = await this.prisma.user.findUnique({
+      where: { id: adminUserId },
+      select: { adminRole: true, associationName: true },
+    });
     const resident = await this.prisma.resident.findFirst({
       where: { id: residentId, ...scope },
       select: {
@@ -126,6 +130,17 @@ export class AdminService {
       },
     });
     if (!resident) throw new NotFoundException('Resident application not found');
+    if (status === ApprovalStatus.APPROVED) {
+      const association = await this.prisma.association.findUnique({
+        where: { name: resident.neighbourhood },
+        select: { chairmanPhone: true },
+      });
+      if (association?.chairmanPhone && approver?.adminRole !== AdminRole.ASSOCIATION_REP) {
+        throw new ForbiddenException(
+          `This resident must first be confirmed by the ${resident.neighbourhood} association representative`,
+        );
+      }
+    }
     if (status === ApprovalStatus.APPROVED && !this.isProfileComplete(resident)) {
       throw new BadRequestException('Resident must complete profile and dependant details before approval');
     }
@@ -139,8 +154,37 @@ export class AdminService {
 
     const notif = this.buildNotification(status, reason);
     return this.prisma.$transaction(async tx => {
-      await tx.resident.update({ where: { id: residentId }, data: { approvalStatus: status, statusReason: reason ?? null, statusChangedAt: now, statusChangedBy: adminUserId } });
+      await tx.resident.update({
+        where: { id: residentId },
+        data: {
+          approvalStatus: status,
+          statusReason: reason ?? null,
+          statusChangedAt: now,
+          statusChangedBy: adminUserId,
+          associationConfirmedAt:
+            status === ApprovalStatus.APPROVED && approver?.adminRole === AdminRole.ASSOCIATION_REP
+              ? now
+              : undefined,
+          associationConfirmedBy:
+            status === ApprovalStatus.APPROVED && approver?.adminRole === AdminRole.ASSOCIATION_REP
+              ? adminUserId
+              : undefined,
+        },
+      });
       if (resident.card) await tx.card.update({ where: { id: resident.card.id }, data: cardData });
+      if (status === ApprovalStatus.APPROVED) {
+        await tx.dependant.updateMany({
+          where: { residentId, approvalStatus: ApprovalStatus.PENDING },
+          data: {
+            approvalStatus: ApprovalStatus.APPROVED,
+            statusChangedAt: now,
+            statusChangedBy: adminUserId,
+            cardStatus: CardStatus.ACTIVE,
+            cardIssuedAt: now,
+            cardExpiresAt: expiresAt,
+          },
+        });
+      }
       await tx.notification.create({ data: { userId: resident.userId, type: `RESIDENT_${status}`, title: notif.title, body: notif.body } });
       return tx.resident.findUniqueOrThrow({ where: { id: residentId }, select: adminResidentSelect });
     });

@@ -21,7 +21,7 @@ export class MerchantGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context
       .switchToHttp()
-      .getRequest<Request & { user?: { userId?: string; role?: string; merchantId?: string; merchantRole?: string } }>();
+      .getRequest<Request & { user?: { userId?: string; role?: string; merchantId?: string; merchantRole?: string; canScanCards?: boolean } }>();
 
     if (req.user?.role !== UserRole.MERCHANT) {
       throw new ForbiddenException('Merchant access is required');
@@ -30,6 +30,7 @@ export class MerchantGuard implements CanActivate {
     if (req.user.userId === 'merchant-demo-user') {
       req.user.merchantId = 'merchant-demo';
       req.user.merchantRole = 'OWNER';
+      req.user.canScanCards = true;
       return true;
     }
 
@@ -37,6 +38,7 @@ export class MerchantGuard implements CanActivate {
       where: { userId: req.user.userId, isActive: true },
       select: {
         role: true,
+        canScanCards: true,
         merchant: { select: { id: true, approvalStatus: true } },
       },
     });
@@ -54,6 +56,7 @@ export class MerchantGuard implements CanActivate {
     // Attach for use in controllers/services
     req.user.merchantId = merchantUser.merchant.id;
     req.user.merchantRole = merchantUser.role;
+    req.user.canScanCards = merchantUser.role === 'OWNER' || merchantUser.canScanCards;
 
     return true;
   }

@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ApprovalStatus, Prisma } from '@prisma/client';
+import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDependantDto } from './dto/create-dependant.dto';
 import { UpdateDependantDto } from './dto/update-dependant.dto';
@@ -16,6 +17,13 @@ const dependantSelect = {
   fullName: true,
   relationship: true,
   phone: true,
+  dateOfBirth: true,
+  isMinor: true,
+  membershipId: true,
+  qrToken: true,
+  cardStatus: true,
+  cardIssuedAt: true,
+  cardExpiresAt: true,
   approvalStatus: true,
   statusReason: true,
   statusChangedAt: true,
@@ -59,6 +67,10 @@ export class DependantsService {
         fullName: input.fullName.trim(),
         relationship: input.relationship.trim(),
         phone,
+        dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null,
+        isMinor: input.isMinor,
+        membershipId: `BVC-FAM-${randomBytes(6).toString('hex').toUpperCase()}`,
+        qrToken: `BVC-FAMILY-${randomBytes(24).toString('base64url')}`,
       },
       select: dependantSelect,
     });
@@ -98,6 +110,8 @@ export class DependantsService {
         fullName: input.fullName?.trim() ?? dependant.fullName,
         relationship: input.relationship?.trim() ?? dependant.relationship,
         phone,
+        dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : dependant.dateOfBirth,
+        isMinor: input.isMinor ?? dependant.isMinor,
         // Reset to PENDING so admin re-reviews after an edit
         approvalStatus: ApprovalStatus.PENDING,
         statusReason: null,
@@ -123,9 +137,17 @@ export class DependantsService {
   }
 
   // ── Admin: list all dependants (optionally filtered by status) ────────
-  async adminList(status?: ApprovalStatus, query?: string) {
+  async adminList(status?: ApprovalStatus, query?: string, adminUserId?: string) {
     const search = query?.trim();
+    const admin = adminUserId ? await this.prisma.user.findUnique({
+      where: { id: adminUserId },
+      select: { adminRole: true, associationName: true },
+    }) : null;
+    const scope = admin?.adminRole === 'ASSOCIATION_REP' && admin.associationName
+      ? { resident: { neighbourhood: { equals: admin.associationName, mode: 'insensitive' as const } } }
+      : {};
     const where: Prisma.DependantWhereInput = {
+      ...scope,
       ...(status ? { approvalStatus: status } : {}),
       ...(search
         ? {
@@ -156,10 +178,10 @@ export class DependantsService {
         },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.dependant.count({ where: { approvalStatus: ApprovalStatus.PENDING } }),
-      this.prisma.dependant.count({ where: { approvalStatus: ApprovalStatus.APPROVED } }),
-      this.prisma.dependant.count({ where: { approvalStatus: ApprovalStatus.REJECTED } }),
-      this.prisma.dependant.count({ where: { approvalStatus: ApprovalStatus.SUSPENDED } }),
+      this.prisma.dependant.count({ where: { ...scope, approvalStatus: ApprovalStatus.PENDING } }),
+      this.prisma.dependant.count({ where: { ...scope, approvalStatus: ApprovalStatus.APPROVED } }),
+      this.prisma.dependant.count({ where: { ...scope, approvalStatus: ApprovalStatus.REJECTED } }),
+      this.prisma.dependant.count({ where: { ...scope, approvalStatus: ApprovalStatus.SUSPENDED } }),
     ]);
 
     return { dependants, counts: { pending, approved, rejected, suspended } };
@@ -174,17 +196,35 @@ export class DependantsService {
   ) {
     const dependant = await this.prisma.dependant.findUnique({
       where: { id: dependantId },
-      select: { id: true, fullName: true, resident: { select: { userId: true } } },
+      select: { id: true, fullName: true, resident: { select: { userId: true, neighbourhood: true } } },
     });
     if (!dependant) throw new NotFoundException('Dependant not found');
+    const approver = await this.prisma.user.findUnique({
+      where: { id: adminUserId },
+      select: { adminRole: true, associationName: true },
+    });
+    if (
+      approver?.adminRole === 'ASSOCIATION_REP' &&
+      approver.associationName?.toLowerCase() !== dependant.resident.neighbourhood.toLowerCase()
+    ) {
+      throw new ForbiddenException('This family member belongs to another association');
+    }
+    const now = new Date();
+    const expiresAt = new Date(now);
+    expiresAt.setFullYear(expiresAt.getFullYear() + 1);
 
     const updated = await this.prisma.dependant.update({
       where: { id: dependantId },
       data: {
         approvalStatus: status,
         statusReason: reason ?? null,
-        statusChangedAt: new Date(),
+        statusChangedAt: now,
         statusChangedBy: adminUserId,
+        cardStatus:
+          status === ApprovalStatus.APPROVED ? 'ACTIVE' :
+          status === ApprovalStatus.SUSPENDED ? 'SUSPENDED' : 'PENDING_VERIFICATION',
+        cardIssuedAt: status === ApprovalStatus.APPROVED ? now : null,
+        cardExpiresAt: status === ApprovalStatus.APPROVED ? expiresAt : null,
       },
       select: dependantSelect,
     });

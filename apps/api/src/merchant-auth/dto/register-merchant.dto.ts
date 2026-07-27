@@ -39,6 +39,14 @@ export class RegisterMerchantDto {
   location!: string;
 
   @IsString()
+  @IsNotEmpty()
+  streetName!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  associationName!: string;
+
+  @IsString()
   @MinLength(8)
   password!: string;
 

@@ -1,5 +1,7 @@
 import { AdminRole, BenefitType, MerchantUserRole, OfferStatus, PrismaClient, RedemptionModel, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { createHash, randomBytes } from 'crypto';
+import { ASSOCIATION_DIRECTORY } from './association-directory';
 
 const prisma = new PrismaClient();
 
@@ -54,11 +56,130 @@ const merchants = [
   },
 ];
 
+async function ensureMerchantBenefitProfile(
+  userId: string,
+  fullName: string,
+  associationName = 'Unassigned',
+  streetName?: string,
+) {
+  const accessSuffix = createHash('sha256').update(userId).digest('hex').slice(0, 12).toUpperCase();
+  await prisma.accessCard.upsert({
+    where: { userId },
+    update: {},
+    create: {
+      userId,
+      cardNumber: `BVC-MER-${accessSuffix}`,
+      qrToken: `BVC-ACCESS-${randomBytes(24).toString('base64url')}`,
+    },
+  });
+  const existing = await prisma.resident.findUnique({ where: { userId } });
+  if (existing) return;
+  const now = new Date();
+  const expiresAt = new Date(now);
+  expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+  await prisma.resident.create({
+    data: {
+      userId,
+      fullName,
+      neighbourhood: associationName,
+      streetName,
+      memberCategory: 'Merchant owner',
+      approvalStatus: 'APPROVED',
+      associationConfirmedAt: now,
+      consentedAt: now,
+      card: {
+        create: {
+          membershipId: `BVC-BEN-${accessSuffix}`,
+          qrToken: `BVC-BENEFIT-${randomBytes(24).toString('base64url')}`,
+          status: 'ACTIVE',
+          issuedAt: now,
+          expiresAt,
+        },
+      },
+    },
+  });
+}
+
 async function seed() {
   const issuedAt = new Date('2026-06-18T00:00:00.000Z');
   const expiresAt = new Date('2027-06-18T23:59:59.999Z');
   const adminPassword = process.env.ADMIN_INITIAL_PASSWORD || 'BodijaAdmin@2026';
   const merchantPassword = bcrypt.hashSync('merchant123', 10);
+  const representativePassword =
+    process.env.ASSOCIATION_REP_INITIAL_PASSWORD || 'BodijaRep@2026';
+
+  const associationNames = [...new Set(
+    ASSOCIATION_DIRECTORY.map(item => item.association).filter((name): name is string => !!name),
+  )];
+  for (const name of associationNames) {
+    const representative = ASSOCIATION_DIRECTORY.find(
+      item => item.association === name && item.chairman,
+    );
+    const association = await prisma.association.upsert({
+      where: { name },
+      update: {
+        chairmanName: representative?.chairman,
+        chairmanPhone: representative?.phone,
+      },
+      create: {
+        name,
+        chairmanName: representative?.chairman,
+        chairmanPhone: representative?.phone,
+      },
+    });
+
+    for (const entry of ASSOCIATION_DIRECTORY.filter(item => item.association === name)) {
+      await prisma.associationStreet.upsert({
+        where: { name_associationId: { name: entry.street, associationId: association.id } },
+        update: {},
+        create: { name: entry.street, associationId: association.id },
+      });
+    }
+
+    if (representative?.phone) {
+      const repUser = await prisma.user.upsert({
+        where: { phone: representative.phone },
+        update: {
+          displayName: representative.chairman,
+          role: UserRole.ADMIN,
+          adminRole: AdminRole.ASSOCIATION_REP,
+          associationName: name,
+          isActive: true,
+        },
+        create: {
+          phone: representative.phone,
+          displayName: representative.chairman,
+          passwordHash: bcrypt.hashSync(representativePassword, 12),
+          role: UserRole.ADMIN,
+          adminRole: AdminRole.ASSOCIATION_REP,
+          associationName: name,
+          isActive: true,
+        },
+      });
+      const suffix = createHash('sha256').update(repUser.id).digest('hex').slice(0, 12).toUpperCase();
+      await prisma.accessCard.upsert({
+        where: { userId: repUser.id },
+        update: {},
+        create: {
+          userId: repUser.id,
+          cardNumber: `BVC-REP-${suffix}`,
+          qrToken: `BVC-ACCESS-${randomBytes(24).toString('base64url')}`,
+        },
+      });
+    }
+  }
+
+  for (const entry of ASSOCIATION_DIRECTORY.filter(item => !item.association)) {
+    const exists = await prisma.associationStreet.findFirst({
+      where: { name: entry.street, associationId: null },
+    });
+    if (!exists) {
+      await prisma.associationStreet.create({ data: { name: entry.street } });
+    }
+  }
+
+  console.log(`✓ Seeded ${associationNames.length} associations and ${ASSOCIATION_DIRECTORY.length} street records`);
+  console.log(`✓ Association representative temporary password: ${representativePassword}`);
 
   await prisma.user.upsert({
     where: { email: 'gisknigeria@gmail.com' },
@@ -149,6 +270,7 @@ async function seed() {
       isActive: true,
     },
   });
+  await ensureMerchantBenefitProfile(testMerchantUser.id, 'Test Merchant');
 
   console.log('✓ Test merchant ready — login: merchant@community.local / merchant123');
 
@@ -191,6 +313,24 @@ async function seed() {
         isActive: true,
       },
     });
+    const directoryMatch = ASSOCIATION_DIRECTORY.find(entry =>
+      merchantData.location.toLowerCase().includes(entry.street.toLowerCase()),
+    );
+    if (directoryMatch?.association) {
+      await prisma.merchant.update({
+        where: { id: created.id },
+        data: {
+          streetName: directoryMatch.street,
+          associationName: directoryMatch.association,
+        },
+      });
+    }
+    await ensureMerchantBenefitProfile(
+      ownerUser.id,
+      merchantData.contactPerson,
+      directoryMatch?.association,
+      directoryMatch?.street,
+    );
 
     // Create offer if merchant was just created (no offers yet)
     const offerCount = await prisma.offer.count({ where: { merchantId: created.id } });

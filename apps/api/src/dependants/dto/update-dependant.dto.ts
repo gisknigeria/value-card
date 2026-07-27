@@ -4,6 +4,7 @@ import {
   IsString,
   Matches,
   MaxLength,
+  IsBoolean,
 } from 'class-validator';
 
 export class UpdateDependantDto {
@@ -25,4 +26,7 @@ export class UpdateDependantDto {
     message: 'phone must be a valid phone number',
   })
   phone?: string;
+
+  @IsOptional() @IsString() dateOfBirth?: string;
+  @IsOptional() @IsBoolean() isMinor?: boolean;
 }

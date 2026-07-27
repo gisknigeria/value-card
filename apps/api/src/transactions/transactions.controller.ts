@@ -19,7 +19,7 @@ import { RedeemRewardDto } from './dto/redeem-reward.dto';
 import { ReverseTransactionDto } from './dto/reverse-transaction.dto';
 
 type AuthRequest = Request & {
-  user: { userId: string; role: string; merchantId?: string; merchantRole?: string };
+  user: { userId: string; role: string; merchantId?: string; merchantRole?: string; canScanCards?: boolean };
 };
 
 @Controller('merchant')
@@ -35,8 +35,8 @@ export class TransactionsController {
     @Body('idempotencyKey') idempotencyKey?: string,
     @Body('deviceInfo') deviceInfo?: string,
   ) {
-    if (req.user.merchantRole !== 'OWNER') {
-      throw new ForbiddenException('Only the merchant owner can scan cards');
+    if (!req.user.canScanCards) {
+      throw new ForbiddenException('The merchant owner has not granted this account permission to scan cards');
     }
     return this.svc.lookupCard(
       cardToken,

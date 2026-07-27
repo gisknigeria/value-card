@@ -1,0 +1,2 @@
+ALTER TABLE "MerchantUser"
+ADD COLUMN "canScanCards" BOOLEAN NOT NULL DEFAULT false;
