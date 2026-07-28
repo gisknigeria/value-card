@@ -7,6 +7,7 @@ import {
   Camera,
   CheckCircle2,
   Clock3,
+  Download,
   Eye,
   EyeOff,
   KeyRound,
@@ -1494,9 +1495,23 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
 function RoleAccessCard({ mu }: { mu: MerchantUserProfile }) {
   const card = mu.user.accessCard?.status === 'ACTIVE' ? mu.user.accessCard : null;
   const name = mu.user.displayName || (mu.role === 'OWNER' ? mu.merchant.contactPerson : 'Merchant staff');
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [downloading, setDownloading] = useState(false);
+  const downloadCard = async () => {
+    if (!cardRef.current || !card) return;
+    setDownloading(true);
+    try {
+      const { default: html2canvas } = await import('html2canvas');
+      const canvas = await html2canvas(cardRef.current, { scale: 3, backgroundColor: '#512b6c', useCORS: true });
+      const link = document.createElement('a');
+      link.download = `bodija-access-card-${card.cardNumber}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } finally { setDownloading(false); }
+  };
   return (
     <section className="role-card-shell admin-workspace" style={{ marginTop: 24, padding: 24, maxWidth: 560 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div ref={cardRef} style={{ display: 'flex', justifyContent: 'space-between', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
         <div className="role-card-details">
           <small style={{ color: 'var(--muted)', fontWeight: 800 }}>BERA · BODIJA VALUE CARD</small>
           <h2 style={{ margin: '8px 0 4px' }}>{name}</h2>
@@ -1517,6 +1532,7 @@ function RoleAccessCard({ mu }: { mu: MerchantUserProfile }) {
           ? 'Use this personal benefit card at participating merchants and present it for gate identification.'
           : `Your QR code and card will appear after ${mu.merchant.associationName || 'your association'} confirms your profile.`}
       </p>
+      <button className="outline-button" type="button" onClick={() => void downloadCard()} disabled={!card || downloading} style={{ marginTop: 16 }}><Download size={16} /> {downloading ? 'Saving…' : 'Download card'}</button>
     </section>
   );
 }
