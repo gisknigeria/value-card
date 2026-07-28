@@ -1492,10 +1492,7 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
 }
 
 function RoleAccessCard({ mu }: { mu: MerchantUserProfile }) {
-  const eligibility = mu.user.resident;
-  const card = eligibility?.approvalStatus === 'APPROVED' && eligibility.card?.status === 'ACTIVE'
-    ? eligibility.card
-    : null;
+  const card = mu.user.accessCard?.status === 'ACTIVE' ? mu.user.accessCard : null;
   const name = mu.user.displayName || (mu.role === 'OWNER' ? mu.merchant.contactPerson : 'Merchant staff');
   return (
     <section className="role-card-shell admin-workspace" style={{ marginTop: 24, padding: 24, maxWidth: 560 }}>
@@ -1506,7 +1503,7 @@ function RoleAccessCard({ mu }: { mu: MerchantUserProfile }) {
           <p style={{ margin: 0, color: 'var(--muted)' }}>
             Merchant {mu.role === 'OWNER' ? 'owner' : 'staff'} · {mu.merchant.businessName}
           </p>
-          <strong style={{ display: 'block', marginTop: 18 }}>{card?.membershipId || 'Awaiting association approval'}</strong>
+          <strong style={{ display: 'block', marginTop: 18 }}>{card?.cardNumber || 'Awaiting association approval'}</strong>
           <span className={`dependant-status-badge ${card?.status === 'ACTIVE' ? 'status-approved' : 'status-pending'}`} style={{ marginTop: 8 }}>
             {card?.status?.toLowerCase().replace(/_/g, ' ') || 'pending approval'}
           </span>

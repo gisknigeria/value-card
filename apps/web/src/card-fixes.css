@@ -1,0 +1,2 @@
+/* Final card layout safeguards. */
+.value-card .member-details{right:calc(24px + clamp(77px,16vw,126px) + 20px)!important;max-width:none!important;overflow:hidden}.value-card .member-details h2{overflow-wrap:anywhere}@media(max-width:620px){.value-card .member-details{right:106px!important;max-width:none!important}}
