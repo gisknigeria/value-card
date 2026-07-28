@@ -991,6 +991,7 @@ function AdminLogin({ onLogin }: { onLogin: (token: string, admin: AdminIdentity
       </section>
       <section className="admin-login-form">
         <form onSubmit={submit}>
+          <div className="portal-role-lockup admin-role"><small>Governance access</small><strong>ASSOCIATION &amp; ADMIN PORTAL</strong></div>
           <div className="admin-login-icon"><ShieldCheck size={25} /></div>
           <span>Secure administration</span>
           <h2>Administrator sign in</h2>

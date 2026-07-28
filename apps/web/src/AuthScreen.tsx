@@ -136,7 +136,10 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             <div><strong>Bodija</strong><small>Value Card</small></div>
           </div>
           <div className="auth-heading">
-            <span>Resident portal</span>
+            <div className="portal-role-lockup resident-role">
+              <small>Resident access</small>
+              <strong>RESIDENT PORTAL</strong>
+            </div>
           <h2>{mode === 'login' ? 'Welcome back' : 'Create your resident account'}</h2>
             <p>{mode === 'login' ? 'Sign in with your email address or phone number.' : 'Create your login first, then complete your resident profile for approval.'}</p>
           </div>

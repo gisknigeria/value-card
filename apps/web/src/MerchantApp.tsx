@@ -193,7 +193,7 @@ function MerchantRegister({ onSwitch, onAuth }: {
             <div><strong>Bodija</strong><small>Value Card</small></div>
           </div>
           <div className="auth-heading">
-            <span>Merchant portal</span>
+            <div className="portal-role-lockup merchant-role"><small>Business access</small><strong>MERCHANT PORTAL</strong></div>
             <h2>Register your business</h2>
             <p>Your application will be reviewed by BERA before going live.</p>
           </div>
@@ -299,6 +299,7 @@ function MerchantLogin({ onSwitch, onAuth }: {
       </section>
       <section className="admin-login-form">
         <form onSubmit={submit}>
+          <div className="portal-role-lockup merchant-role"><small>Business access</small><strong>MERCHANT PORTAL</strong></div>
           <div className="admin-login-icon"><Store size={25} /></div>
           <span>Merchant sign in</span>
           <h2>Welcome back</h2>

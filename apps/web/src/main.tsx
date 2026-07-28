@@ -4,6 +4,7 @@ import App from './App';
 import AdminApp from './AdminApp';
 import MerchantApp from './MerchantApp';
 import './styles.css';
+import './redesign.css';
 
 const path = window.location.pathname;
 

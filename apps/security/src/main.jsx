@@ -6,6 +6,7 @@ import './controls.css';
 import './cameras.css';
 import './access-scanner.css';
 import './access-point.css';
+import './security-redesign.css';
 import App from './App.jsx';
 
 createRoot(document.getElementById('root')).render(<App />);

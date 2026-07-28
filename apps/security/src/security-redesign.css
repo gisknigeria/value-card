@@ -1,0 +1,317 @@
+:root {
+  --command-bg: #07111f;
+  --command-surface: #0d1b2a;
+  --command-surface-2: #122438;
+  --command-border: rgba(151, 175, 199, .18);
+  --command-text: #edf6ff;
+  --command-muted: #93a9bd;
+  --command-accent: #39d9a0;
+  --command-alert: #ffb84d;
+  font-family: Inter, Arial, sans-serif;
+  color: var(--command-text);
+  background: var(--command-bg);
+}
+
+body,
+body * {
+  font-size: inherit !important;
+  font-weight: inherit !important;
+}
+
+body {
+  color: var(--command-text);
+  background: var(--command-bg);
+  font-size: 14px !important;
+  font-weight: 400 !important;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(57, 217, 160, .24);
+  outline-offset: 2px;
+}
+
+.login-shell {
+  position: relative;
+  isolation: isolate;
+  min-height: 100dvh;
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 480px);
+  gap: clamp(48px, 8vw, 140px);
+  padding: clamp(32px, 7vw, 110px);
+  background:
+    radial-gradient(circle at 12% 18%, rgba(57, 217, 160, .2), transparent 28%),
+    radial-gradient(circle at 88% 82%, rgba(255, 184, 77, .13), transparent 26%),
+    linear-gradient(135deg, #07111f 0%, #0a1b2c 55%, #07131b 100%);
+}
+
+.login-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: .23;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, .045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, .045) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: linear-gradient(to right, #000, transparent 74%);
+}
+
+.login-brand {
+  max-width: 720px;
+}
+
+.login-brand .crest {
+  width: 88px;
+  height: 88px;
+  border: 1px solid rgba(57, 217, 160, .55);
+  color: #fff;
+  background-color: rgba(7, 17, 31, .7);
+  box-shadow: 0 0 0 10px rgba(57, 217, 160, .06), 0 22px 48px rgba(0, 0, 0, .28);
+}
+
+.login-brand > p:nth-child(2) {
+  margin-top: 32px;
+  color: var(--command-accent);
+}
+
+.login-brand .sigar-word {
+  font-size: clamp(58px, 8vw, 108px) !important;
+  line-height: .88 !important;
+  letter-spacing: -.04em !important;
+  margin: 24px 0 20px !important;
+}
+
+.sigar-title,
+.sigar-title span {
+  font-size: clamp(22px, 2.2vw, 34px) !important;
+  line-height: 1.18 !important;
+}
+
+.sigar-title strong {
+  color: var(--command-accent);
+  font-size: clamp(27px, 3vw, 44px) !important;
+}
+
+.login-brand .muted {
+  max-width: 620px;
+  color: #afc1d2;
+  font-size: 16px !important;
+  line-height: 1.75;
+}
+
+.security-line {
+  margin-top: 52px;
+  color: #7d96ab;
+  font-size: 11px !important;
+}
+
+.security-line span {
+  color: var(--command-accent);
+}
+
+.login-card {
+  max-width: 480px;
+  padding: clamp(28px, 4vw, 46px);
+  color: #15283a;
+  background: rgba(249, 252, 255, .97);
+  border: 1px solid rgba(255, 255, 255, .65);
+  border-radius: 24px;
+  box-shadow: 0 32px 90px rgba(0, 0, 0, .38);
+  backdrop-filter: blur(18px);
+}
+
+.security-role-lockup {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 28px;
+  padding-left: 15px;
+  border-left: 4px solid #e99422;
+}
+
+.security-role-lockup small {
+  color: #667b8e;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.security-role-lockup strong {
+  color: #0a1b2c;
+  font-size: clamp(24px, 3vw, 34px) !important;
+  font-weight: 850 !important;
+  letter-spacing: -.03em;
+}
+
+.login-card h2 {
+  color: #10283b;
+  font-size: 22px !important;
+  font-weight: 750 !important;
+}
+
+.login-card label {
+  color: #526a7e;
+  font-size: 13px !important;
+  font-weight: 650 !important;
+}
+
+.login-card input {
+  min-height: 52px;
+  color: #10283b;
+  background: #f3f7fa;
+  border: 1px solid #cedae3;
+  border-radius: 12px;
+}
+
+.login-card input:focus {
+  border-color: #159c74;
+  box-shadow: 0 0 0 4px rgba(21, 156, 116, .1);
+}
+
+.login-card .primary {
+  min-height: 52px;
+  border-radius: 12px;
+  color: #fff;
+  background: linear-gradient(135deg, #0d765d, #159c74);
+  box-shadow: 0 12px 28px rgba(13, 118, 93, .22);
+  font-weight: 750 !important;
+}
+
+.login-card .remember-label span,
+.login-card .demo-note,
+.login-card .powered-by {
+  color: #64798b;
+}
+
+.app-shell {
+  background: var(--command-bg);
+}
+
+.app-shell header,
+.app-shell aside,
+.command-sidebar {
+  color: var(--command-text);
+  background: rgba(9, 23, 36, .97);
+  border-color: var(--command-border);
+}
+
+.app-shell header {
+  min-height: 68px;
+  padding-inline: 20px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .18);
+}
+
+.brand-small b {
+  font-size: 14px !important;
+  font-weight: 800 !important;
+}
+
+.brand-small span,
+.user small,
+.sidebar-user small,
+.muted {
+  color: var(--command-muted);
+}
+
+.search,
+.sidebar-search,
+.map-tools button,
+.coord-jump {
+  color: #c8d8e6;
+  background: rgba(13, 27, 42, .94);
+  border-color: var(--command-border);
+  border-radius: 10px;
+}
+
+.search {
+  height: 42px;
+}
+
+.incident-card {
+  border-radius: 12px;
+}
+
+.incident-card:hover,
+.incident-card.selected {
+  background: var(--command-surface-2);
+  border-color: rgba(57, 217, 160, .28);
+}
+
+.card-top b,
+.side-heading h2,
+.sidebar-panel-head h2 {
+  color: #f4f9fd;
+  font-weight: 750 !important;
+}
+
+.primary,
+.add {
+  background: linear-gradient(135deg, #0d765d, #159c74);
+  border-color: rgba(57, 217, 160, .45);
+}
+
+.detail,
+.modal {
+  color: var(--command-text);
+  background: rgba(10, 25, 39, .97);
+  border-color: var(--command-border);
+  border-radius: 18px;
+}
+
+.detail {
+  box-shadow: -24px 0 70px rgba(0, 0, 0, .38);
+}
+
+.map {
+  background: #091522;
+}
+
+.leaflet-tile-pane {
+  filter: saturate(.72) brightness(.84) contrast(1.05) hue-rotate(165deg);
+}
+
+@media (max-width: 900px) {
+  .login-shell {
+    grid-template-columns: 1fr;
+    place-items: center;
+    padding: 28px;
+  }
+
+  .login-card {
+    justify-self: center;
+  }
+}
+
+@media (max-width: 650px) {
+  .login-shell {
+    padding: 18px;
+  }
+
+  .login-card {
+    width: 100%;
+    padding: 26px 20px;
+    border-radius: 20px;
+  }
+
+  .security-role-lockup strong {
+    font-size: 26px !important;
+  }
+
+  .app-shell header {
+    min-height: 60px;
+  }
+
+  .detail {
+    border-radius: 18px 18px 0 0;
+  }
+}

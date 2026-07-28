@@ -703,6 +703,7 @@ function Login({ onLogin }) {
         </div>
       </section>
       <form className="login-card" onSubmit={submit}>
+        <div className="security-role-lockup"><small>Command access</small><strong>SECURITY OPERATIONS</strong></div>
         <div className="eyebrow">AUTHORIZED ACCESS ONLY</div>
         <h2>SIGAR sign in</h2>
         <p className="muted">Use your issued Bodija security credentials.</p>
