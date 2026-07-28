@@ -5,6 +5,7 @@ import AdminApp from './AdminApp';
 import MerchantApp from './MerchantApp';
 import './styles.css';
 import './redesign.css';
+import './modern-theme.css';
 
 const path = window.location.pathname;
 
