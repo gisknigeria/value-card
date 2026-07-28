@@ -65,6 +65,50 @@ export class AdminService {
     return { residents, total, page, pageSize: PAGE_SIZE, counts: { pending, approved, rejected, suspended } };
   }
 
+  async stickers(downloaded: boolean, adminUserId?: string) {
+    const scope = await this.residentScope(adminUserId);
+    const residents = await this.prisma.resident.findMany({
+      where: {
+        ...scope,
+        approvalStatus: ApprovalStatus.APPROVED,
+        card: { isNot: null },
+        stickerDownloadedAt: downloaded ? { not: null } : null,
+      },
+      select: {
+        id: true, fullName: true, streetName: true, residentialAddress: true,
+        stickerDownloadedAt: true, stickerDownloadCount: true,
+        card: { select: { membershipId: true, qrToken: true } },
+      },
+      orderBy: [{ streetName: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    const streetPositions = new Map<string, number>();
+    return residents.map((resident) => {
+      const street = (resident.streetName || 'Unassigned street').trim();
+      const key = street.toLocaleLowerCase();
+      const position = (streetPositions.get(key) || 0) + 1;
+      streetPositions.set(key, position);
+      const letters = street.replace(/[^a-z]/gi, '').slice(0, 2).toUpperCase().padEnd(2, 'X');
+      return { ...resident, street, stickerCode: `${letters} ${String(position).padStart(2, '0')}` };
+    });
+  }
+
+  async markStickersExported(residentIds: string[], adminUserId: string) {
+    const ids = [...new Set(residentIds.filter(Boolean))];
+    if (!ids.length) throw new BadRequestException('Select at least one resident');
+    const scope = await this.residentScope(adminUserId);
+    const valid = await this.prisma.resident.findMany({
+      where: { id: { in: ids }, ...scope, approvalStatus: ApprovalStatus.APPROVED, card: { isNot: null } },
+      select: { id: true },
+    });
+    if (!valid.length) throw new BadRequestException('No eligible residents were selected');
+    await this.prisma.resident.updateMany({
+      where: { id: { in: valid.map((item) => item.id) } },
+      data: { stickerDownloadedAt: new Date(), stickerDownloadCount: { increment: 1 } },
+    });
+    return { exported: valid.length };
+  }
+
   // ── Resident detail (full history) ────────────────────────────────────
   async residentDetail(residentId: string, adminUserId?: string) {
     const scope = await this.residentScope(adminUserId);

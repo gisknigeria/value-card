@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import QRCode from 'react-qr-code';
 import {
   AlertTriangle,
   BarChart2,
@@ -12,6 +13,7 @@ import {
   ChevronRight,
   ChevronUp,
   Clock3,
+  Download,
   LogOut,
   MapPin,
   MessageSquare,
@@ -1244,7 +1246,84 @@ function AdminWalkInPanel({ token }: { token: string }) {
 
 // ── Admin dashboard ───────────────────────────────────────────────────
 
-type AdminSection = 'residents' | 'dependants' | 'positions' | 'renewals' | 'merchants' | 'offers' | 'complaints' | 'transactions' | 'reports' | 'walkins';
+interface StickerResident {
+  id: string;
+  fullName: string;
+  street: string;
+  stickerCode: string;
+  stickerDownloadedAt: string | null;
+  stickerDownloadCount: number;
+  card: { membershipId: string; qrToken: string };
+}
+
+function StickerExportsPanel({ token }: { token: string }) {
+  const [downloaded, setDownloaded] = useState(false);
+  const [items, setItems] = useState<StickerResident[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [message, setMessage] = useState('');
+  const stickerRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const load = useCallback(async () => {
+    setLoading(true); setMessage('');
+    try {
+      const result = await apiRequest<StickerResident[]>(`/api/admin/stickers?downloaded=${downloaded}`, { headers: { Authorization: `Bearer ${token}` } });
+      setItems(result);
+      setSelected(downloaded ? [] : result.map((item) => item.id));
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to load sticker records'); }
+    finally { setLoading(false); }
+  }, [downloaded, token]);
+
+  useEffect(() => { void load(); }, [load]);
+  const toggle = (id: string) => setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  const selectAll = () => setSelected(selected.length === items.length ? [] : items.map((item) => item.id));
+
+  const exportStickers = async (ids: string[]) => {
+    if (!ids.length) return;
+    setExporting(true); setMessage('');
+    try {
+      const { default: html2canvas } = await import('html2canvas');
+      for (const id of ids) {
+        const node = stickerRefs.current[id];
+        const resident = items.find((item) => item.id === id);
+        if (!node || !resident) continue;
+        const canvas = await html2canvas(node, { scale: 3, backgroundColor: '#ffffff', useCORS: true });
+        const link = document.createElement('a');
+        link.download = `bodija-vehicle-sticker-${resident.stickerCode.replace(/\s/g, '-')}-${resident.fullName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      }
+      await apiRequest('/api/admin/stickers/export', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ residentIds: ids }) });
+      setMessage(`${ids.length} sticker${ids.length === 1 ? '' : 's'} downloaded and recorded.`);
+      await load();
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to create sticker download'); }
+    finally { setExporting(false); }
+  };
+
+  return <section className="sticker-workspace">
+    <div className="sticker-intro">
+      <div><span>Vehicle identification</span><h2>Sticker exports</h2><p>Each approved resident gets a street code and their sequence number on that street. New exports move automatically to Sticker downloaded.</p></div>
+      <div className="sticker-tabs"><button className={!downloaded ? 'active' : ''} onClick={() => setDownloaded(false)}>Ready to download</button><button className={downloaded ? 'active' : ''} onClick={() => setDownloaded(true)}>Sticker downloaded</button></div>
+    </div>
+    <div className="sticker-toolbar"><label><input type="checkbox" checked={items.length > 0 && selected.length === items.length} onChange={selectAll} /> Select all ({selected.length})</label><button className="primary-button" disabled={exporting || !selected.length} onClick={() => void exportStickers(selected)}><Download size={17} /> {exporting ? 'Preparing downloads…' : downloaded ? 'Re-download selected' : 'Bulk download stickers'}</button></div>
+    {message && <div className={message.includes('recorded') ? 'profile-success' : 'auth-error'}>{message}</div>}
+    {loading ? <div className="admin-empty"><RefreshCw size={22} /><strong>Loading sticker queue…</strong></div> : items.length === 0 ? <div className="admin-empty"><BadgeCheck size={26} /><strong>{downloaded ? 'No downloaded stickers yet' : 'All eligible residents have been downloaded'}</strong><span>{downloaded ? 'Exports will appear here after their first download.' : 'New approved residents will appear here automatically.'}</span></div> : <div className="sticker-grid">
+      {items.map((resident) => <article className={`sticker-record ${selected.includes(resident.id) ? 'selected' : ''}`} key={resident.id}>
+        <label className="sticker-select"><input type="checkbox" checked={selected.includes(resident.id)} onChange={() => toggle(resident.id)} /><span>{resident.fullName}</span></label>
+        <small>{resident.street} · {resident.card.membershipId}</small>
+        <div className="vehicle-sticker" ref={(node) => { stickerRefs.current[resident.id] = node; }}>
+          <div className="sticker-code"><b>{resident.stickerCode.split(' ')[0]}</b><strong>{resident.stickerCode.split(' ')[1]}</strong></div>
+          <div className="sticker-qr"><QRCode value={resident.card.qrToken} size={112} bgColor="#ffffff" fgColor="#080808" /></div>
+          <em>Bodija Value Card</em>
+        </div>
+        <div className="sticker-record-foot"><span>{downloaded ? `Downloaded ${resident.stickerDownloadCount} time${resident.stickerDownloadCount === 1 ? '' : 's'}` : 'New sticker'}</span><button className="text-button" onClick={() => void exportStickers([resident.id])}>Download one</button></div>
+      </article>)}
+    </div>}
+  </section>;
+}
+
+type AdminSection = 'residents' | 'dependants' | 'positions' | 'renewals' | 'merchants' | 'offers' | 'complaints' | 'transactions' | 'reports' | 'walkins' | 'stickers';
 
 function AdminDashboard({ token, admin, logout }: { token: string; admin: AdminIdentity; logout: () => void }) {
   const [section, setSection] = useState<AdminSection>('residents');
@@ -1328,6 +1407,9 @@ function AdminDashboard({ token, admin, logout }: { token: string; admin: AdminI
           <button className={section === 'walkins' ? 'active' : ''} onClick={() => setSection('walkins')}>
             <Bell size={16} /> Walk-ins
           </button>
+          <button className={section === 'stickers' ? 'active' : ''} onClick={() => setSection('stickers')}>
+            <Download size={16} /> Stickers
+          </button>
         </div>
 
         {section === 'residents'    && <ResidentsPanel token={token} />}
@@ -1340,6 +1422,7 @@ function AdminDashboard({ token, admin, logout }: { token: string; admin: AdminI
         {section === 'transactions' && <TransactionAuditPanel token={token} />}
         {section === 'reports'      && <AdminReportsPanel token={token} />}
         {section === 'walkins'      && <AdminWalkInPanel token={token} />}
+        {section === 'stickers'     && <StickerExportsPanel token={token} />}
       </main>
     </div>
   );

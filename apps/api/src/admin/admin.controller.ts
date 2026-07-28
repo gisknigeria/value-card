@@ -5,6 +5,7 @@ import {
   Inject,
   Param,
   Patch,
+  Post,
   Query,
   Req,
   UseGuards,
@@ -43,6 +44,11 @@ class UpdateUserPositionDto {
   @IsOptional() @IsString() @MaxLength(120) associationName?: string;
 }
 
+class StickerExportDto {
+  @IsString({ each: true })
+  residentIds!: string[];
+}
+
 @Controller('admin')
 @UseGuards(JwtAuthGuard, AdminGuard)
 export class AdminController {
@@ -71,6 +77,16 @@ export class AdminController {
     @Req() req: AuthRequest,
   ) {
     return this.admin.updateResidentStatus(id, input.status, req.user.userId, input.reason);
+  }
+
+  @Get('stickers')
+  stickers(@Req() req: AuthRequest, @Query('downloaded') downloaded?: string) {
+    return this.admin.stickers(downloaded === 'true', req.user.userId);
+  }
+
+  @Post('stickers/export')
+  exportStickers(@Req() req: AuthRequest, @Body() input: StickerExportDto) {
+    return this.admin.markStickersExported(input.residentIds, req.user.userId);
   }
 
   @Get('users')

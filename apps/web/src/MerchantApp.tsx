@@ -1498,10 +1498,10 @@ function RoleAccessCard({ mu }: { mu: MerchantUserProfile }) {
     : null;
   const name = mu.user.displayName || (mu.role === 'OWNER' ? mu.merchant.contactPerson : 'Merchant staff');
   return (
-    <section className="admin-workspace" style={{ marginTop: 24, padding: 24, maxWidth: 560 }}>
+    <section className="role-card-shell admin-workspace" style={{ marginTop: 24, padding: 24, maxWidth: 560 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div>
-          <small style={{ color: 'var(--muted)', fontWeight: 800 }}>BODIJA ENTRY CARD</small>
+        <div className="role-card-details">
+          <small style={{ color: 'var(--muted)', fontWeight: 800 }}>BERA · BODIJA VALUE CARD</small>
           <h2 style={{ margin: '8px 0 4px' }}>{name}</h2>
           <p style={{ margin: 0, color: 'var(--muted)' }}>
             Merchant {mu.role === 'OWNER' ? 'owner' : 'staff'} · {mu.merchant.businessName}
@@ -1511,8 +1511,8 @@ function RoleAccessCard({ mu }: { mu: MerchantUserProfile }) {
             {card?.status?.toLowerCase().replace(/_/g, ' ') || 'pending approval'}
           </span>
         </div>
-        <div style={{ background: '#fff', borderRadius: 16, padding: 14, minWidth: 156, minHeight: 156, display: 'grid', placeItems: 'center' }}>
-          {card ? <QRCode value={card.qrToken} size={128} bgColor="#ffffff" fgColor="#12344d" /> : <QrCode size={64} />}
+        <div className="role-card-qr" style={{ minWidth: 156, minHeight: 156 }}>
+          {card ? <QRCode value={card.qrToken} size={128} bgColor="#ffffff" fgColor="#073f37" /> : <QrCode size={64} />}
         </div>
       </div>
       <p style={{ margin: '20px 0 0', color: 'var(--muted)', fontSize: 12 }}>

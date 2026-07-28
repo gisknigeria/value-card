@@ -148,6 +148,8 @@ model Resident {
   statusChangedBy  String?
   consentedAt      DateTime
   photoUrl         String?
+  stickerDownloadedAt DateTime?
+  stickerDownloadCount Int       @default(0)
   createdAt        DateTime       @default(now())
   card             Card?
   dependants       Dependant[]
