@@ -615,35 +615,44 @@ function ScanPanel({ token, offers }: { token: string; offers: MerchantOffer[] }
   const startCamera = async () => {
     setCameraError(''); setScanError('');
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('Camera scanning needs HTTPS (or localhost) and a supported browser. You can still scan a QR image.');
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: 'environment' } },
         audio: false,
       });
       streamRef.current = stream;
       setCameraOpen(true);
-      window.setTimeout(() => {
-        const video = videoRef.current;
-        if (!video) return;
-        video.srcObject = stream;
-        void video.play();
-        const canvas = document.createElement('canvas');
-        const tick = async () => {
-          if (!streamRef.current || !video.videoWidth) {
-            frameRef.current = requestAnimationFrame(tick);
-            return;
-          }
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          canvas.getContext('2d')?.drawImage(video, 0, 0);
-          const decoded = await decodeCanvas(canvas);
-          if (decoded) {
-            await verifyToken(decoded);
-            return;
-          }
+      let video: HTMLVideoElement | null = null;
+      for (let attempt = 0; attempt < 12 && !video; attempt += 1) {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 25));
+        video = videoRef.current;
+      }
+      if (!video) throw new Error('Camera preview could not be started. Please try again.');
+      video.srcObject = stream;
+      await new Promise<void>((resolve) => {
+        video!.onloadedmetadata = () => resolve();
+        if (video!.readyState >= 1) resolve();
+      });
+      await video.play();
+      const canvas = document.createElement('canvas');
+      const tick = async () => {
+        if (!streamRef.current || !video || !video.videoWidth) {
           frameRef.current = requestAnimationFrame(tick);
-        };
+          return;
+        }
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d')?.drawImage(video, 0, 0);
+        const decoded = await decodeCanvas(canvas);
+        if (decoded) {
+          await verifyToken(decoded);
+          return;
+        }
         frameRef.current = requestAnimationFrame(tick);
-      }, 0);
+      };
+      frameRef.current = requestAnimationFrame(tick);
     } catch (error) {
       setCameraError(error instanceof Error ? error.message : 'Camera access was unavailable');
       stopCamera();
