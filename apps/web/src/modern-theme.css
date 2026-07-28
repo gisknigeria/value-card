@@ -40,6 +40,9 @@ h1, h2, h3, p { margin: 0; }
 
 #root { min-height: 100vh; }
 .app-shell { min-height: 100vh; }
+.app-shell, .admin-shell { overflow-x: hidden; }
+.main-area, .admin-main, .page-content, .topbar, .admin-header { min-width: 0; }
+.topbar .top-actions, .admin-header .admin-account { min-width: 0; }
 
 .sidebar {
   width: 268px;
@@ -908,8 +911,14 @@ h1, h2, h3, p { margin: 0; }
   .bottom-grid {
     grid-template-columns: 1fr;
   }
+  .page-content {
+    padding: 28px 24px 70px;
+  }
   .sidebar { width: 250px; }
   .main-area { margin-left: 250px; }
+  .merchant-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 900px) {
@@ -926,6 +935,54 @@ h1, h2, h3, p { margin: 0; }
   .admin-login-form form {
     width: min(560px, 100%);
   }
+  .topbar {
+    min-height: 78px;
+    padding: 14px 16px;
+    height: auto;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .topbar .top-actions {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .sos-button {
+    padding: 0 12px;
+    font-size: 0.92rem;
+  }
+  .metrics,
+  .admin-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .filter-bar,
+  .auth-field-row {
+    grid-template-columns: 1fr;
+  }
+  .profile-form,
+  .merchant-dashboard-card,
+  .merchant-summary-card,
+  .merchant-dashboard-hero,
+  .admin-toolbar {
+    padding: 16px;
+  }
+  .merchant-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .admin-header {
+    min-height: auto;
+    padding: 14px 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .admin-account {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .admin-main {
+    padding: 24px 18px 70px;
+  }
 }
 
 @media (max-width: 760px) {
@@ -936,14 +993,23 @@ h1, h2, h3, p { margin: 0; }
   }
   .sidebar.open { transform: translateX(0); }
   .main-area { margin-left: 0; }
-  .topbar { padding: 0 16px; height: 72px; }
-  .page-content { padding: 24px 16px 86px; }
+  .topbar {
+    padding: 12px 14px;
+    align-items: flex-start;
+  }
+  .topbar > div:first-child {
+    max-width: 60%;
+  }
+  .topbar h1 {
+    font-size: 1.04rem;
+  }
+  .page-content { padding: 22px 14px 84px; }
   .welcome-line,
   .directory-intro,
   .card-page-head {
     flex-direction: column;
     align-items: flex-start;
-    padding: 20px;
+    padding: 18px;
   }
   .metrics { grid-template-columns: 1fr; }
   .filter-bar { grid-template-columns: 1fr; }
@@ -952,9 +1018,18 @@ h1, h2, h3, p { margin: 0; }
     min-height: auto;
   }
   .card-bottom { grid-template-columns: 1fr 1fr 70px; }
-  .admin-header { padding: 0 14px; }
+  .profile-form { gap: 12px; }
+  .admin-header { padding: 12px 14px; }
   .admin-account { gap: 8px; }
   .admin-account button { width: 38px; height: 38px; }
+  .admin-title {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .admin-title h1 {
+    font-size: clamp(1.28rem, 3vw, 1.72rem);
+  }
   .admin-section-tabs {
     overflow-x: auto;
     padding: 6px;
@@ -967,7 +1042,7 @@ h1, h2, h3, p { margin: 0; }
   .merchant-dashboard-hero {
     flex-direction: column;
     align-items: flex-start;
-    padding: 20px;
+    padding: 18px;
   }
   .merchant-hero-actions {
     width: 100%;
@@ -979,20 +1054,66 @@ h1, h2, h3, p { margin: 0; }
   .merchant-summary-grid {
     grid-template-columns: 1fr;
   }
+  .merchant-spotlight-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
   .merchant-support-card {
     flex-direction: column;
     align-items: flex-start;
   }
+  .auth-context,
+  .admin-login-context {
+    min-height: 280px;
+    padding: 24px 18px;
+  }
+  .auth-panel,
+  .admin-login-form {
+    padding: 20px 14px 32px;
+  }
+  .auth-form-wrap,
+  .admin-login-form form {
+    padding: 24px 18px;
+  }
+  .notif-panel {
+    width: min(100vw, 420px);
+  }
 }
 
 @media (max-width: 480px) {
-  .topbar { height: 68px; }
+  .topbar {
+    min-height: 72px;
+    padding: 10px 12px;
+  }
+  .sos-button {
+    min-height: 36px;
+    padding: 0 10px;
+    font-size: 0.84rem;
+  }
+  .sos-button svg {
+    display: none;
+  }
+  .top-actions {
+    gap: 8px;
+  }
+  .icon-button {
+    width: 36px;
+    height: 36px;
+  }
+  .page-content { padding: 18px 12px 80px; }
   .welcome-line,
   .directory-intro,
   .card-page-head { padding: 18px; }
-  .value-card { min-height: 270px; padding: 22px; border-radius: 24px; }
-  .card-bottom { grid-template-columns: 1fr 1fr 70px; gap: 8px; }
-  .qr { width: 70px; height: 70px; }
+  .value-card { min-height: 250px; padding: 20px; border-radius: 20px; }
+  .card-bottom { grid-template-columns: 1fr 1fr 64px; gap: 8px; }
+  .qr { width: 64px; height: 64px; }
   .auth-form-wrap,
-  .admin-login-form form { padding: 24px; border-radius: 24px; }
+  .admin-login-form form { padding: 20px 16px; border-radius: 20px; }
+  .admin-header { padding: 12px 14px; }
+  .admin-account > div { min-width: 0; }
+  .admin-account strong { font-size: 0.85rem; }
+  .admin-account small { display: none; }
+  .merchant-dashboard-card,
+  .merchant-summary-card,
+  .merchant-dashboard-hero { padding: 16px; }
 }
