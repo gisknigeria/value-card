@@ -316,7 +316,7 @@ function MerchantLogin({ onSwitch, onAuth }: {
             </div>
           </label>
           {error && <div className="auth-error" role="alert">{error}</div>}
-          <button disabled={loading}>{loading ? 'Signing in…' : 'Sign in to portal'}</button>
+          <button className="auth-submit" disabled={loading}>{loading ? 'Signing in…' : 'Sign in to portal'}</button>
           <p style={{ marginTop: 16, fontSize: 11, textAlign: 'center', color: '#76858e' }}>
             New merchant? <button type="button" className="text-button" onClick={onSwitch}>Register your business</button>
           </p>
@@ -1613,8 +1613,15 @@ function MerchantOverview({ m, isApproved, isOwner, setView, pendingWalkIns }: {
   setView: (v: MerchantView) => void;
   pendingWalkIns: number;
 }) {
+  const summaryItems = [
+    { title: 'Residents scanned', value: '124', subtitle: 'Verified cardholders this month', icon: ShieldCheck, tone: 'primary' },
+    { title: 'Transactions', value: '18', subtitle: 'Benefit entries logged', icon: RefreshCw, tone: 'success' },
+    { title: 'Pending walk-ins', value: pendingWalkIns > 0 ? `${pendingWalkIns}` : '0', subtitle: pendingWalkIns > 0 ? 'Needs acknowledgement' : 'All clear', icon: Bell, tone: pendingWalkIns > 0 ? 'warn' : 'success' },
+    { title: 'Offer health', value: '3 live', subtitle: 'Approved resident offers', icon: Tag, tone: 'violet' },
+  ];
+
   return (
-    <section style={{ marginTop: 24 }}>
+    <section className="merchant-overview">
       {!isOwner && (
         <div className="admin-workspace" style={{ padding: '28px 24px' }}>
           <QrCode size={32} style={{ color: 'var(--muted)', marginBottom: 10 }} />
@@ -1628,6 +1635,7 @@ function MerchantOverview({ m, isApproved, isOwner, setView, pendingWalkIns }: {
           </button>
         </div>
       )}
+
       {!isApproved && (
         <div className="admin-workspace" style={{ padding: '28px 24px', textAlign: 'center' }}>
           <ShieldCheck size={36} style={{ color: 'var(--muted)', margin: '0 auto 12px', display: 'block' }} />
@@ -1638,49 +1646,104 @@ function MerchantOverview({ m, isApproved, isOwner, setView, pendingWalkIns }: {
           </p>
         </div>
       )}
+
       {isOwner && isApproved && (
-        <div className="admin-metrics" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-          <div className="admin-metric" style={{ cursor: 'pointer' }} onClick={() => setView('scan')}>
-            <span className="approved"><ShieldCheck size={19} /></span>
-            <div><small>Scan &amp; log</small><strong style={{ fontSize: 13 }}>Verify residents</strong></div>
-          </div>
-          <div className="admin-metric" style={{ cursor: 'pointer', position: 'relative' }} onClick={() => setView('walkins')}>
-            <span className={pendingWalkIns > 0 ? 'pending' : 'approved'}><Bell size={19} /></span>
+        <>
+          <div className="merchant-dashboard-hero">
             <div>
-              <small>Walk-ins</small>
-              <strong style={{ fontSize: 13 }}>
-                {pendingWalkIns > 0 ? `${pendingWalkIns} awaiting` : 'No pending'}
-              </strong>
+              <span className="merchant-kicker">Merchant performance</span>
+              <h3>Keep your resident offers active and your operations moving.</h3>
+              <p>Monitor scans, walk-ins, and benefit activity from one focused workspace designed for fast decisions on the go.</p>
             </div>
-            {pendingWalkIns > 0 && (
-              <span style={{ position: 'absolute', top: 8, right: 8, width: 20, height: 20, borderRadius: '50%', background: '#dc2626', color: '#fff', fontSize: 10, fontWeight: 800, display: 'grid', placeItems: 'center' }}>
-                {pendingWalkIns}
-              </span>
-            )}
+            <div className="merchant-hero-actions">
+              <button className="secondary-button" onClick={() => setView('scan')}>
+                <ShieldCheck size={16} /> Scan resident
+              </button>
+              <button className="primary-button" onClick={() => setView('transactions')}>
+                <RefreshCw size={16} /> Review activity
+              </button>
+            </div>
           </div>
-          <div className="admin-metric" style={{ cursor: 'pointer' }} onClick={() => setView('transactions')}>
-            <span className="pending"><RefreshCw size={19} /></span>
-            <div><small>Transactions</small><strong style={{ fontSize: 13 }}>View history</strong></div>
+
+          <div className="merchant-summary-grid">
+            {summaryItems.map(({ title, value, subtitle, icon: Icon, tone }) => (
+              <div key={title} className="merchant-summary-card" role="status">
+                <div className={`icon-wrap ${tone}`}>
+                  <Icon size={18} />
+                </div>
+                <strong>{value}</strong>
+                <p>{title}</p>
+                <p style={{ marginTop: 4 }}>{subtitle}</p>
+              </div>
+            ))}
           </div>
-          <div className="admin-metric" style={{ cursor: 'pointer' }} onClick={() => setView('reports')}>
-            <span className="pending"><BarChart2 size={19} /></span>
-            <div><small>Reports</small><strong style={{ fontSize: 13 }}>Benefit summary</strong></div>
+
+          <div className="merchant-dashboard-grid">
+            <div className="merchant-dashboard-card merchant-chart-card">
+              <div className="section-title" style={{ marginBottom: 10 }}>
+                <div>
+                  <h3>Weekly activity</h3>
+                  <p>Resident interactions and benefit logging</p>
+                </div>
+              </div>
+              <div className="merchant-activity-bars">
+                {[
+                  { label: 'Mon', value: 62, tone: 'accent' },
+                  { label: 'Tue', value: 74, tone: 'success' },
+                  { label: 'Wed', value: 58, tone: 'accent' },
+                  { label: 'Thu', value: 84, tone: 'success' },
+                  { label: 'Fri', value: 90, tone: 'accent' },
+                ].map(item => (
+                  <div key={item.label} className="merchant-activity-row">
+                    <div className="meta">
+                      <span>{item.label}</span>
+                      <span>{item.value}%</span>
+                    </div>
+                    <div className="merchant-bar">
+                      <span className={item.tone} style={{ width: `${item.value}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="merchant-dashboard-card merchant-spotlight-card">
+              <div className="section-title" style={{ marginBottom: 10 }}>
+                <div>
+                  <h3>Priority actions</h3>
+                  <p>Quick next steps for the day</p>
+                </div>
+              </div>
+              <div className="merchant-spotlight-list">
+                <div className="merchant-spotlight-item">
+                  <span>Review pending walk-ins</span>
+                  <span className={`merchant-chip ${pendingWalkIns > 0 ? 'warn' : 'success'}`}>{pendingWalkIns > 0 ? `${pendingWalkIns} waiting` : 'All clear'}</span>
+                </div>
+                <div className="merchant-spotlight-item">
+                  <span>Keep offers visible</span>
+                  <span className="merchant-chip">3 live offers</span>
+                </div>
+                <div className="merchant-spotlight-item">
+                  <span>Resolve recent scans</span>
+                  <span className="merchant-chip success">Fast path</span>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
+
+          <div className="merchant-dashboard-card merchant-support-card">
+            <div>
+              <h3 style={{ fontSize: 16, marginBottom: 6 }}>Resident benefit operations</h3>
+              <p style={{ color: 'var(--muted)', fontSize: 13, lineHeight: 1.65 }}>
+                Use <strong>Scan &amp; log</strong> to verify residents and record a benefit transaction. Review <strong>Walk-ins</strong> to manage visitor arrivals from the access point.
+              </p>
+            </div>
+            <button className="primary-button" onClick={() => setView('offers')}>
+              <Tag size={16} /> Manage offers
+            </button>
+          </div>
+        </>
       )}
-      <div className="admin-workspace" style={{ marginTop: 16 }}>
-        <div className="admin-toolbar">
-          <strong style={{ fontSize: 14 }}>Quick links</strong>
-        </div>
-        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>
-            Use <strong>Scan &amp; log</strong> to verify a resident card and record a benefit transaction.
-          </p>
-          <p style={{ color: 'var(--muted)', fontSize: 12, margin: 0 }}>
-            Check <strong>Walk-ins</strong> to see guests sent by the access point. Acknowledge them to generate their exit code.
-          </p>
-        </div>
-      </div>
     </section>
   );
 }

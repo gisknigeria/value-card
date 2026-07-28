@@ -574,6 +574,11 @@ h1, h2, h3, p { margin: 0; }
   color: #ffffff;
   background: linear-gradient(135deg, var(--accent-2), #d946ef);
   box-shadow: 0 14px 30px rgba(217, 70, 239, 0.22);
+  font-weight: 800;
+}
+.admin-login-form form > button:not(.text-button):hover {
+  transform: translateY(-1px);
+  filter: saturate(1.05);
 }
 .auth-input {
   min-height: 48px;
@@ -594,31 +599,294 @@ h1, h2, h3, p { margin: 0; }
 .admin-role { color: #d8d2ff; }
 
 .admin-header {
-  min-height: 80px;
+  min-height: 82px;
   padding: 0 24px;
-  background: rgba(255, 255, 255, 0.94);
-  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  background: linear-gradient(135deg, #132542 0%, #23476f 50%, #10182b 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
   backdrop-filter: blur(16px);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.03);
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.12);
+  color: #ffffff;
+}
+.admin-brand strong {
+  color: #ffffff;
+  letter-spacing: -0.02em;
+}
+.admin-brand small {
+  color: #c8d7ef;
+}
+.admin-account button {
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.14);
+}
+.admin-account button:hover {
+  background: rgba(255, 255, 255, 0.24);
+  transform: translateY(-1px);
+}
+.admin-title {
+  padding-top: 6px;
+}
+.admin-title h1 {
+  font-size: clamp(1.45rem, 2.3vw, 2.08rem);
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+.admin-title p {
+  color: #64748b;
 }
 .admin-section-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 18px;
-  padding: 6px;
+  padding: 8px;
   border: 1px solid var(--border);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.9);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.95);
   box-shadow: var(--shadow-sm);
+}
+.admin-section-tabs button {
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 0;
+  background: transparent;
+  color: #475569;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .admin-section-tabs button.active {
   background: linear-gradient(135deg, var(--primary), var(--primary-2));
   color: #ffffff;
+  box-shadow: var(--shadow-sm);
 }
 .admin-toolbar {
+  min-height: 64px;
   padding: 12px 14px;
   border-radius: 16px;
-  background: var(--panel);
+  background: linear-gradient(180deg, #f9fbff, #ffffff);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
+}
+.admin-metrics {
+  gap: 14px;
+}
+.admin-metric {
+  min-height: 96px;
+  padding: 18px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #ffffff, #f8fbff);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+.admin-workspace {
+  overflow: hidden;
+  border-radius: 24px;
+  background: linear-gradient(180deg, #ffffff, #f9fbff);
+}
+.dependant-card {
+  padding: 16px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+.dependant-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+.merchant-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 24px;
+}
+.merchant-dashboard-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 24px 24px 22px;
+  border-radius: 28px;
+  background: linear-gradient(135deg, #1f3355 0%, #385a8f 46%, #8053b8 100%);
+  color: #ffffff;
+  box-shadow: var(--shadow-lg);
+}
+.merchant-dashboard-hero h3 {
+  font-size: clamp(1.15rem, 2vw, 1.5rem);
+  margin: 8px 0 6px;
+  letter-spacing: -0.03em;
+}
+.merchant-dashboard-hero p {
+  color: rgba(255, 255, 255, 0.84);
+  max-width: 640px;
+  line-height: 1.65;
+}
+.merchant-kicker {
+  display: inline-flex;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffe8d2;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.merchant-hero-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.merchant-dashboard-grid,
+.merchant-summary-grid {
+  display: grid;
+  gap: 14px;
+}
+.merchant-dashboard-grid {
+  grid-template-columns: 1.3fr 0.95fr;
+}
+.merchant-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.merchant-dashboard-card {
+  padding: 20px;
+  border-radius: 24px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  box-shadow: var(--shadow-sm);
+}
+.merchant-chart-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f7faff 100%);
+}
+.merchant-spotlight-card {
+  background: linear-gradient(135deg, #fff8ef 0%, #fefcff 100%);
+}
+.merchant-activity-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+}
+.merchant-activity-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.merchant-activity-row .meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.84rem;
+  color: #475569;
+}
+.merchant-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: #e8eef7;
+  overflow: hidden;
+}
+.merchant-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--primary), #7cc8ff);
+}
+.merchant-bar span.accent {
+  background: linear-gradient(90deg, var(--accent), #ff7a59);
+}
+.merchant-bar span.success {
+  background: linear-gradient(90deg, var(--success), #5dbf9d);
+}
+.merchant-spotlight-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+.merchant-spotlight-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+.merchant-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  background: rgba(47, 110, 237, 0.1);
+  color: var(--primary);
+}
+.merchant-chip.warn {
+  background: rgba(249, 115, 22, 0.14);
+  color: #b45416;
+}
+.merchant-chip.success {
+  background: rgba(36, 180, 126, 0.12);
+  color: #217951;
+}
+.merchant-summary-card {
+  padding: 18px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+.merchant-summary-card .icon-wrap {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 12px;
+  color: #ffffff;
+}
+.merchant-summary-card .icon-wrap.primary { background: linear-gradient(135deg, var(--primary), #6a93ff); }
+.merchant-summary-card .icon-wrap.success { background: linear-gradient(135deg, var(--success), #6ec7a3); }
+.merchant-summary-card .icon-wrap.warn { background: linear-gradient(135deg, var(--accent), #ff7b55); }
+.merchant-summary-card .icon-wrap.violet { background: linear-gradient(135deg, #6b5cff, #9f7cf2); }
+.merchant-summary-card strong {
+  display: block;
+  font-size: 1.05rem;
+  margin-bottom: 4px;
+}
+.merchant-summary-card p {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+.merchant-support-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.merchant-support-card > div:first-child {
+  max-width: 620px;
+}
+.icon-button {
+  border: 1px solid var(--border);
+  background: linear-gradient(135deg, #ffffff, #f4f7ff);
+  color: #1e3a5f;
+  box-shadow: var(--shadow-sm);
+}
+.icon-button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 .approval-timeline {
   border-radius: 18px;
@@ -684,6 +952,37 @@ h1, h2, h3, p { margin: 0; }
     min-height: auto;
   }
   .card-bottom { grid-template-columns: 1fr 1fr 70px; }
+  .admin-header { padding: 0 14px; }
+  .admin-account { gap: 8px; }
+  .admin-account button { width: 38px; height: 38px; }
+  .admin-section-tabs {
+    overflow-x: auto;
+    padding: 6px;
+    scrollbar-width: thin;
+  }
+  .admin-section-tabs button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .merchant-dashboard-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 20px;
+  }
+  .merchant-hero-actions {
+    width: 100%;
+  }
+  .merchant-hero-actions button {
+    width: 100%;
+  }
+  .merchant-dashboard-grid,
+  .merchant-summary-grid {
+    grid-template-columns: 1fr;
+  }
+  .merchant-support-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 @media (max-width: 480px) {
