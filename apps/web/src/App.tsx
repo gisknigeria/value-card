@@ -270,24 +270,10 @@ function ValueCard({ resident, compact = false, cardRef }: { resident: ResidentP
   const isActive = card?.status === 'ACTIVE';
   return (
     <div className={`value-card ${compact ? 'compact' : ''}`} ref={cardRef}>
-      <div className="card-ivory-zone"><span>BERA</span><strong>Bodija Value Card</strong><small>Resident Value · Community Growth</small></div>
-      <div className="card-emerald-zone">
-        <div className="card-top"><span className="card-programme">Value. Community. Growth.</span><span className={`card-active ${isActive ? '' : 'pending'}`}><i /> {card ? humanStatus(card.status) : 'Not issued'}</span></div>
-        <div className="member-details">
-          <small>{resident.memberCategory}</small>
-          <h2>{resident.fullName}</h2>
-          <span>{card?.membershipId || 'Membership pending'}</span>
-        </div>
-        <div className="card-bottom">
-          <div><small>Cluster</small><strong>{resident.neighbourhood}</strong></div>
-          <div><small>Valid until</small><strong>{formatDate(card?.expiresAt)}</strong></div>
-          {card && (
-            <div className="qr">
-              <QRCode value={card.qrToken} size={compact ? 68 : 126} bgColor="#ffffff" fgColor="#073f37" />
-            </div>
-          )}
-        </div>
-      </div>
+      <div className="card-top"><div className="card-programme-title"><span>BERA</span><strong>Bodija<br />Value Card</strong><small>Value. Community. Growth.</small></div><span className={`card-active ${isActive ? '' : 'pending'}`}><i /> {card ? humanStatus(card.status) : 'Not issued'}</span></div>
+      {card && <div className="qr"><QRCode value={card.qrToken} size={compact ? 68 : 126} bgColor="#ffffff" fgColor="#512b6c" /></div>}
+      <div className="member-details"><small>{resident.memberCategory}</small><h2>{resident.fullName}</h2><span>{card?.membershipId || 'Membership pending'}</span></div>
+      <div className="card-bottom"><div><small>Cluster</small><strong>{resident.neighbourhood}</strong></div><div><small>Valid until</small><strong>{formatDate(card?.expiresAt)}</strong></div></div>
     </div>
   );
 }
