@@ -8,6 +8,16 @@
   font-family: inherit;
 }
 
+.ap-location-lock{min-height:100dvh;display:grid;place-items:center;padding:20px;background:radial-gradient(circle at 50% 25%,rgba(70,211,167,.14),transparent 32%),linear-gradient(145deg,#06111b,#0b1b2a);color:#eef7fc}
+.ap-location-lock-card{width:min(440px,100%);padding:clamp(26px,6vw,44px);text-align:center;border:1px solid rgba(137,177,201,.2);border-radius:24px;background:rgba(10,26,40,.94);box-shadow:0 28px 80px rgba(0,0,0,.42)}
+.ap-location-pulse{position:relative;display:grid;place-items:center;width:74px;height:74px;margin:0 auto 24px;border:1px solid rgba(70,211,167,.3);border-radius:50%;background:rgba(70,211,167,.07);box-shadow:0 0 0 12px rgba(70,211,167,.035)}
+.ap-location-pulse:before{content:"";width:28px;height:28px;border:3px solid #46d3a7;border-radius:50% 50% 50% 7px;transform:rotate(-45deg)}
+.ap-location-pulse span{position:absolute;width:8px;height:8px;border-radius:50%;background:#46d3a7;box-shadow:0 0 14px #46d3a7}
+.ap-location-lock-card>small{color:#46d3a7;font-size:9px;font-weight:850;letter-spacing:.16em}.ap-location-lock-card h1{margin:10px 0 8px;font-size:clamp(24px,6vw,34px);line-height:1.08}.ap-location-lock-card p{margin:0;color:#9db2c1;font-size:13px;line-height:1.65}
+.ap-location-assignment{display:grid;gap:4px;margin:24px 0;padding:13px;border:1px solid rgba(137,177,201,.15);border-radius:12px;background:rgba(255,255,255,.025)}.ap-location-assignment span{color:#7f98a9;font-size:9px;text-transform:uppercase;letter-spacing:.12em}.ap-location-assignment strong{font-size:14px}
+.ap-location-retry,.ap-location-signout{width:100%;min-height:48px;border-radius:12px;font:inherit;font-weight:750;cursor:pointer}.ap-location-retry{border:0;color:#061710;background:linear-gradient(135deg,#46d3a7,#32b98f)}.ap-location-signout{min-height:40px;margin-top:8px;border:0;color:#8299aa;background:transparent}.ap-location-signout:hover{color:#ff9d94}
+.gate-location-help{display:block;margin-top:10px;color:#8da4b8;font-size:10px;line-height:1.5}
+
 /* ── Header ──────────────────────────────────────────────────────────── */
 .ap-header {
   display: flex;

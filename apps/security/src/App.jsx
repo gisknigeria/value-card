@@ -687,7 +687,10 @@ function Login({ onLogin }) {
   return (
     <main className="login-shell">
       <section className="login-brand">
-        <div className="crest eye-logo">S</div>
+        <div className="login-brand-top">
+          <div className="crest eye-logo">S</div>
+          <div className="login-system-state"><i /> SYSTEM OPERATIONAL</div>
+        </div>
         <p className="sigar-word">SIGAR</p>
         <h1 className="sigar-title">
           <span>
@@ -703,12 +706,10 @@ function Login({ onLogin }) {
         </div>
       </section>
       <form className="login-card" onSubmit={submit}>
-        <div className="security-role-lockup"><small>Command access</small><strong>SECURITY OPERATIONS</strong></div>
-        <div className="eyebrow">AUTHORIZED ACCESS ONLY</div>
-        <h2>SIGAR sign in</h2>
-        <p className="muted">Use your issued Bodija security credentials.</p>
+        <div className="security-role-lockup"><small>Authorized personnel only</small><strong>Command sign in</strong></div>
+        <p className="login-instruction">Use your issued Bodija security credentials.</p>
         <label>
-          Email address
+          Officer email
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -716,7 +717,7 @@ function Login({ onLogin }) {
           />
         </label>
         <label>
-          Password
+          Secure password
           <div className="password-wrap">
             <input
               value={password}
@@ -745,12 +746,12 @@ function Login({ onLogin }) {
         </div>
         {error && <div className="error">{error}</div>}
         <button className="primary" disabled={loading}>
-          {loading ? "Authenticating..." : "Enter Bodija security ->"}
+          {loading ? "Authenticating..." : "Enter command centre"}
         </button>
         <button type="button" className="install-login" onClick={installApp}>
           Install SIGAR app
         </button>
-        <p className="powered-by">Powered by GIS Kosult</p>
+        <p className="powered-by"><span /> Encrypted command access · Powered by GIS Kosult</p>
       </form>
     </main>
   );
@@ -1920,6 +1921,24 @@ function OfficerManager({
                   </button>
                 </div>
               </label>
+
+              {form.role === "Access Point" && <>
+                <label>
+                  Assigned gate name
+                  <input required value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="e.g. Main Gate" />
+                </label>
+                <div className="two-col">
+                  <label>
+                    Gate latitude
+                    <input required type="number" step="any" value={form.lat} onChange={(e) => setForm({ ...form, lat: e.target.value })} />
+                  </label>
+                  <label>
+                    Gate longitude
+                    <input required type="number" step="any" value={form.lng} onChange={(e) => setForm({ ...form, lng: e.target.value })} />
+                  </label>
+                </div>
+                <small className="gate-location-help">Access Point officers can only operate within 250 metres of these coordinates.</small>
+              </>}
 
               {error && <div className="error">{error}</div>}
               <button type="submit" className="primary wide">Create account</button>

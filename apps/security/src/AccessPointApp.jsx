@@ -15,6 +15,17 @@ import { io } from "socket.io-client";
 
 const API = "/api";
 const SCAN_COOLDOWN = 3000;
+const ACCESS_RADIUS_METRES = 250;
+const MAX_GPS_ACCURACY_METRES = 150;
+const GPS_STALE_MS = 45000;
+
+function distanceMetres(lat1, lng1, lat2, lng2) {
+  const toRad = value => value * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 // ── QR helpers (same as AccessScanner) ───────────────────────────────────
 async function decodeQR(source) {
@@ -59,7 +70,11 @@ export default function AccessPointApp({ session, onLogout }) {
   // GPS auto-share
   const socketRef = useRef(null);
   const gpsRef = useRef(null);
+  const lastGpsRef = useRef(0);
   const [gpsActive, setGpsActive] = useState(false);
+  const [locationAllowed, setLocationAllowed] = useState(false);
+  const [locationState, setLocationState] = useState("checking");
+  const [locationDistance, setLocationDistance] = useState(null);
 
   // Camera share
   const [sharingCamera, setSharingCamera] = useState(false);
@@ -78,7 +93,10 @@ export default function AccessPointApp({ session, onLogout }) {
 
   // ── Socket + auto GPS ──────────────────────────────────────────────────
   useEffect(() => {
-    const socket = io({ transports: ["polling", "websocket"] });
+    const socket = io({
+      transports: ["polling", "websocket"],
+      auth: { token: session.token },
+    });
     socketRef.current = socket;
     socket.on("connect", () => {
       socket.emit("camera:register", {
@@ -97,22 +115,56 @@ export default function AccessPointApp({ session, onLogout }) {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (!lastGpsRef.current || Date.now() - lastGpsRef.current > GPS_STALE_MS) {
+        setGpsActive(false);
+        setLocationAllowed(false);
+        setLocationState("stale");
+      }
+    }, 5000);
+    const resume = () => {
+      if (document.visibilityState === "visible" && (!gpsRef.current || Date.now() - lastGpsRef.current > GPS_STALE_MS)) {
+        stopGps();
+        startGps(socketRef.current);
+      }
+    };
+    document.addEventListener("visibilitychange", resume);
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", resume); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const startGps = (socket) => {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation) { setLocationState("unsupported"); setLocationAllowed(false); return; }
+    setLocationState("checking");
     gpsRef.current = navigator.geolocation.watchPosition(
       pos => {
+        const expectedLat = Number(session.user.lat);
+        const expectedLng = Number(session.user.lng);
+        const distance = distanceMetres(pos.coords.latitude, pos.coords.longitude, expectedLat, expectedLng);
+        const accurate = Number(pos.coords.accuracy) <= MAX_GPS_ACCURACY_METRES;
+        const withinGate = distance <= ACCESS_RADIUS_METRES;
         const pt = { userId: session.user.id, lat: pos.coords.latitude, lng: pos.coords.longitude, speed: pos.coords.speed || 0, heading: pos.coords.heading || 0, accuracy: pos.coords.accuracy, timestamp: new Date().toISOString() };
         (socket || socketRef.current)?.emit("gps:update", pt);
+        lastGpsRef.current = Date.now();
+        setLocationDistance(Math.round(distance));
         setGpsActive(true);
+        setLocationAllowed(accurate && withinGate);
+        setLocationState(!accurate ? "inaccurate" : withinGate ? "allowed" : "outside");
       },
-      () => setGpsActive(false),
+      error => {
+        setGpsActive(false);
+        setLocationAllowed(false);
+        setLocationState(error.code === 1 ? "denied" : "unavailable");
+      },
       { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 },
     );
   };
   const stopGps = () => {
     if (gpsRef.current != null) navigator.geolocation.clearWatch(gpsRef.current);
     gpsRef.current = null;
+    lastGpsRef.current = 0;
     setGpsActive(false);
+    setLocationAllowed(false);
   };
 
   // ── Camera share ────────────────────────────────────────────────────────
@@ -151,6 +203,30 @@ export default function AccessPointApp({ session, onLogout }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const decisionClass = d => (d === "ALLOWED" || d === "OVERRIDE_ALLOWED") ? "allowed" : "denied";
+
+  if (!locationAllowed) {
+    const messages = {
+      checking: ["Confirming gate location", "Keep location services on while SIGAR confirms that you are at your assigned access point."],
+      denied: ["Location permission required", "Enable precise location for SIGAR in your browser or phone settings, then try again."],
+      outside: ["Outside assigned access point", `You are approximately ${locationDistance ?? "—"} metres from your assigned gate. Access is available within ${ACCESS_RADIUS_METRES} metres.`],
+      inaccurate: ["Waiting for a precise GPS fix", "Move to an open area near the gate and keep precise location enabled."],
+      stale: ["Location signal lost", "SIGAR must receive a live location continuously. Reconnect GPS to continue."],
+      unavailable: ["Location currently unavailable", "Check your phone's location service and network, then try again."],
+      unsupported: ["Location is not supported", "Use a device and browser that supports secure GPS location."],
+    };
+    const [title, detail] = messages[locationState] || messages.checking;
+    return <div className="ap-location-lock">
+      <div className="ap-location-lock-card">
+        <div className="ap-location-pulse"><span /></div>
+        <small>ACCESS POINT SECURITY</small>
+        <h1>{title}</h1>
+        <p>{detail}</p>
+        <div className="ap-location-assignment"><span>Assigned post</span><strong>{session.user.unit || "Bodija Gate"}</strong></div>
+        <button className="ap-location-retry" onClick={() => { stopGps(); startGps(socketRef.current); }}>Retry live location</button>
+        <button className="ap-location-signout" onClick={onLogout}>Sign out</button>
+      </div>
+    </div>;
+  }
 
   return (
     <div className="ap-shell">

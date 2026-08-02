@@ -236,9 +236,8 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
             {error && <div className="auth-error" role="alert">{error}</div>}
 
-            <button className="auth-submit" disabled={loading}>
-              <span>{loading ? 'Please wait...' : mode === 'login' ? 'Sign in to portal' : 'Submit registration'}</span>
-              <ArrowRight size={18} />
+            <button className="auth-submit" disabled={loading} aria-label={loading ? 'Loading' : undefined}>
+              {loading ? <span className="loading-spinner light" role="status" aria-label="Loading" /> : <><span>{mode === 'login' ? 'Sign in to portal' : 'Submit registration'}</span><ArrowRight size={18} /></>}
             </button>
           </form>
 

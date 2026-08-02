@@ -536,3 +536,46 @@ button:active { transform: translateY(1px); }
   .modal-backdrop { padding: 6px; }
   .modal { padding: 18px 15px; border-radius: 18px; }
 }
+
+/* Fixed-height login and final command UI polish */
+.login-shell{height:100dvh;min-height:0;overflow:hidden;padding-block:clamp(18px,5dvh,64px)}
+.login-brand-top{display:flex;align-items:center;gap:22px}
+.login-system-state{display:flex;align-items:center;gap:9px;padding:8px 12px;border:1px solid rgba(56,211,159,.2);border-radius:999px;color:#a9c2d0;background:rgba(6,18,29,.55);font-size:9px!important;font-weight:800!important;letter-spacing:.12em}
+.login-system-state i{width:7px;height:7px;border-radius:50%;background:var(--command-accent);box-shadow:0 0 12px var(--command-accent)}
+.login-card{align-self:center;max-height:calc(100dvh - 36px);overflow:hidden;padding:clamp(20px,3.5dvh,38px)}
+.security-role-lockup{margin-bottom:clamp(14px,2.5dvh,24px)}
+.security-role-lockup strong{font-size:clamp(22px,2.4vw,30px)!important}
+.login-instruction{margin:0 0 4px;color:#667b8e;font-size:13px!important;line-height:1.5}
+.login-card label{margin-top:clamp(12px,2dvh,19px);gap:6px}
+.login-card input{min-height:clamp(44px,6.5dvh,52px);padding-block:10px}
+.login-card .primary{margin-top:clamp(14px,2.4dvh,22px);min-height:clamp(46px,6.5dvh,52px)}
+.remember-row{margin-top:10px}.install-login{min-height:44px;padding:9px 16px}
+.powered-by{margin-top:clamp(12px,2dvh,20px);font-size:8px!important;letter-spacing:.1em}
+.powered-by span{display:inline-block;width:6px;height:6px;margin-right:5px;border-radius:50%;background:#26b88b}
+
+.command-sidebar{scrollbar-color:#284357 transparent}.sidebar-brand{background:rgba(255,255,255,.018)}
+.brand-small .eye-logo{box-shadow:0 0 0 4px rgba(56,211,159,.05)}
+.side-heading h2 em{color:var(--command-accent);border-color:rgba(56,211,159,.2);background:rgba(56,211,159,.06)}
+.card-top time{color:#7f99ab}.officer-row i.active{background:var(--command-accent);box-shadow:0 0 10px rgba(56,211,159,.6)}
+.map-home-dropdown button:hover{border-color:var(--command-border-strong);background:#122a3b}
+.map-layer-select-label span{color:var(--command-accent)}.map-layer-select-label select{border-color:var(--command-border);background:#091824}
+.my-location-target{border-color:var(--command-border);background:rgba(8,22,34,.92);color:#9bb0bf}
+.my-location-target.active{border-color:var(--command-accent);background:#0d382d;color:var(--command-accent)}
+.toast{border-color:rgba(56,211,159,.4);background:#0b3027;color:#9df5d4;border-radius:12px}
+
+@media (max-height:760px) and (min-width:761px){
+  .login-shell{padding-block:18px}.login-brand .crest{width:58px;height:58px}
+  .login-brand .sigar-word{margin:15px 0 8px!important;font-size:clamp(52px,7vw,82px)!important}
+  .sigar-title{margin-block:10px!important}.sigar-title span{font-size:clamp(17px,1.7vw,24px)!important}.sigar-title strong{margin-top:4px;font-size:clamp(22px,2.5vw,34px)!important}
+  .security-line{margin-top:24px}.login-card{padding:23px 28px}.install-login{min-height:40px;margin-top:9px}.powered-by{margin-top:10px}
+}
+@media (max-width:760px){
+  .login-shell{height:100dvh;min-height:0;overflow:hidden;padding:12px}.login-card{width:min(100%,440px);max-height:calc(100dvh - 24px);padding:clamp(17px,3.5dvh,26px) 20px}
+  .security-role-lockup{margin-bottom:clamp(10px,2dvh,18px)}.login-card label{margin-top:clamp(10px,1.8dvh,16px)}.powered-by{margin-top:10px}
+}
+@media (max-height:650px){
+  .login-card{padding-block:15px}.security-role-lockup{margin-bottom:8px;padding-left:11px}.security-role-lockup small{font-size:8px!important}.security-role-lockup strong{font-size:20px!important}
+  .login-instruction{font-size:11px!important}.login-card label{margin-top:8px;font-size:11px!important}.login-card input{min-height:40px}.remember-row{margin-top:7px}
+  .login-card .primary{min-height:42px;margin-top:10px}.install-login{min-height:38px;margin-top:7px;padding:7px 12px}.powered-by{margin-top:7px;font-size:7px!important}.error{margin-top:7px;font-size:10px!important}
+}
+@media (max-height:520px){.install-login,.powered-by{display:none}.login-card{padding-block:12px}}

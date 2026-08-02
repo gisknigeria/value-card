@@ -1325,7 +1325,7 @@ function CardExportsPanel({ token }: { token: string }) {
         <div className="admin-card-render" ref={(node) => { cardRefs.current[resident.id] = node; }}>
           <div className="admin-card-head"><div><span>BERA</span><strong>Bodija<br />Value Card</strong><small>Value. Community. Growth.</small></div><em><i /> ACTIVE</em></div>
           <div className="admin-card-qr"><QRCode value={resident.card.qrToken} size={112} bgColor="#ffffff" fgColor="#512b6c" /></div>
-          <div className="admin-card-member"><small>{resident.memberCategory}</small><h3>{resident.fullName}</h3><span>{resident.card.membershipId}</span></div>
+          <div className="admin-card-member"><small>{resident.memberCategory}</small><h3>{resident.fullName}</h3><span>{resident.card.membershipId.length <= 4 ? '****' : `${resident.card.membershipId.slice(0, -4)}****`}</span></div>
           <div className="admin-card-foot"><div><small>Cluster</small><strong>{resident.neighbourhood}</strong></div><div><small>Valid until</small><strong>{resident.card.expiresAt ? formatDate(resident.card.expiresAt) : 'No expiry'}</strong></div></div>
         </div>
         <div className="sticker-record-foot"><span>Active membership card</span><button className="text-button" onClick={() => void exportCards([resident.id])}>Download one</button></div>

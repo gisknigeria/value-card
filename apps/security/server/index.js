@@ -435,6 +435,7 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 const activeCameraShares = new Map();
+const accessPointGps = new Map();
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
 const auth = (req, res, next) => { try { req.user = jwt.verify((req.headers.authorization || '').replace('Bearer ', ''), secret); next(); } catch { res.status(401).json({ message: 'Session expired. Please sign in again.' }); } };
@@ -480,6 +481,21 @@ const distanceMeters = (a, b) => {
   const endLat = toRad(lat2);
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(startLat) * Math.cos(endLat) * Math.sin(dLng / 2) ** 2;
   return 6371000 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+};
+const accessPointOnLocation = (req, res, next) => {
+  if (req.user?.role !== 'Access Point') return next();
+  const fix = accessPointGps.get(userIdOf(req.user));
+  if (!fix || Date.now() - fix.receivedAt > 45000) {
+    return res.status(403).json({ message: 'A current GPS location is required at the assigned access point.' });
+  }
+  if (Number(fix.accuracy) > 150) {
+    return res.status(403).json({ message: 'GPS accuracy is too low. Wait for a precise location fix.' });
+  }
+  const distance = distanceMeters(fix, req.user);
+  if (distance > 250) {
+    return res.status(403).json({ message: `You are outside your assigned access point (${Math.round(distance)}m away).` });
+  }
+  next();
 };
 const isControlRoomUser = user => isAdminRole(user) || normalizeKey(user?.unit).includes('control room');
 const sameOperationalSpace = (sender, receiver) => {
@@ -700,7 +716,7 @@ app.get('/api/access/events', auth, asyncRoute(async (req, res) => {
   res.json({ events: dataResult.rows, total: countResult.rows[0].total, limit, offset });
 }));
 
-app.post('/api/access/verify', auth, asyncRoute(async (req, res) => {
+app.post('/api/access/verify', auth, accessPointOnLocation, asyncRoute(async (req, res) => {
   if (!pool) {
     // OFFLINE SAFETY: never falsely allow access when DB is unavailable
     return res.status(503).json({
@@ -827,7 +843,7 @@ app.post('/api/access/verify', auth, asyncRoute(async (req, res) => {
 
 // ── Visitor code verify ────────────────────────────────────────────────────
 
-app.post('/api/visitor/verify', auth, asyncRoute(async (req, res) => {
+app.post('/api/visitor/verify', auth, accessPointOnLocation, asyncRoute(async (req, res) => {
   if (!pool) {
     return res.status(503).json({
       decision: 'DENIED',
@@ -912,7 +928,7 @@ app.get('/api/merchants/list', auth, asyncRoute(async (req, res) => {
 }));
 
 // POST /api/walkin — log a new walk-in guest
-app.post('/api/walkin', auth, asyncRoute(async (req, res) => {
+app.post('/api/walkin', auth, accessPointOnLocation, asyncRoute(async (req, res) => {
   if (!pool) return res.status(503).json({ message: 'Database required for walk-in logging' });
   const guestName    = String(req.body.guestName || '').trim().slice(0, 120);
   const guestPhone   = String(req.body.guestPhone || '').trim().slice(0, 30) || null;
@@ -1013,7 +1029,7 @@ app.post('/api/walkin/:id/acknowledge', asyncRoute(async (req, res) => {
 }));
 
 // POST /api/walkin/exit — security verifies exit code and marks guest as exited
-app.post('/api/walkin/exit', auth, asyncRoute(async (req, res) => {
+app.post('/api/walkin/exit', auth, accessPointOnLocation, asyncRoute(async (req, res) => {
   if (!pool) return res.status(503).json({ message: 'Database required' });
   const exitCode = String(req.body.exitCode || '').trim();
   const gate     = String(req.body.gate || 'Main Gate').trim().slice(0, 80);
@@ -1088,14 +1104,14 @@ app.post('/api/users', auth, asyncRoute(async (req, res) => {
     password: await bcrypt.hash(req.body.password, 10),
     role, rank,
     active: true,
-    unit: 'Bodija Gate',
+    unit: String(req.body.unit || 'Bodija Gate').trim().slice(0, 100),
     unitType: 'Gate',
     command: 'Bodija Community',
     division: '',
     station: '',
     lga: '',
-    lat: 7.3775,
-    lng: 3.9470,
+    lat: Number.isFinite(Number(req.body.lat)) ? Number(req.body.lat) : 7.3775,
+    lng: Number.isFinite(Number(req.body.lng)) ? Number(req.body.lng) : 3.9470,
   };
   const created = await store.createUser(user);
   io.emit('user:created', publicUser(created));
@@ -1251,10 +1267,17 @@ io.on('connection', socket => {
 
   // GPS updates — identify the sending user
   socket.on('gps:update', point => {
-    socket.data.user = { ...user, userId: point.userId || user?.userId, lat: Number(point.lat), lng: Number(point.lng) };
-    io.emit('gps:broadcast', { ...point, timestamp: point.timestamp || new Date().toISOString() });
+    const authenticatedUserId = userIdOf(user);
+    const gpsPoint = { ...point, userId: authenticatedUserId, lat: Number(point.lat), lng: Number(point.lng), accuracy: Number(point.accuracy), receivedAt: Date.now(), timestamp: point.timestamp || new Date().toISOString() };
+    socket.data.user = { ...user, userId: authenticatedUserId, lat: gpsPoint.lat, lng: gpsPoint.lng };
+    if (user?.role === 'Access Point' && Number.isFinite(gpsPoint.lat) && Number.isFinite(gpsPoint.lng)) accessPointGps.set(authenticatedUserId, gpsPoint);
+    io.emit('gps:broadcast', gpsPoint);
   });
-  socket.on('gps:stop', ({ userId }) => io.emit('gps:offline', { userId, timestamp: new Date().toISOString() }));
+  socket.on('gps:stop', () => {
+    const authenticatedUserId = userIdOf(user);
+    accessPointGps.delete(authenticatedUserId);
+    io.emit('gps:offline', { userId: authenticatedUserId, timestamp: new Date().toISOString() });
+  });
 
   // Emergency alerts — only emit to authorized listeners
   socket.on('emergency:send', alert => emitEmergencyAlert(socket, { ...(socket.data.user || {}), ...alert }));
@@ -1275,6 +1298,7 @@ io.on('connection', socket => {
   });
 
   socket.on('disconnect', () => {
+    if (user?.role === 'Access Point') accessPointGps.delete(userIdOf(user));
     const camUser = socket.data.cameraUser;
     if (camUser?.role === 'Officer' && activeCameraShares.has(camUser.userId)) {
       activeCameraShares.delete(camUser.userId);

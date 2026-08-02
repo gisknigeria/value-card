@@ -34,6 +34,8 @@ import {
   Download,
   Ticket,
   RefreshCw,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import AuthScreen from './AuthScreen';
@@ -263,7 +265,16 @@ function ApprovalTimeline({ resident }: { resident: ResidentProfile }) {
   );
 }
 
-function ValueCard({ resident, compact = false, cardRef }: { resident: ResidentProfile; compact?: boolean; cardRef?: React.RefObject<HTMLDivElement | null> }) {
+function LoadingSpinner() {
+  return <span className="loading-spinner" role="status" aria-label="Loading" />;
+}
+
+function privateCardNumber(value?: string | null, visible = false) {
+  if (!value || visible) return value || 'Membership pending';
+  return value.length <= 4 ? '****' : `${value.slice(0, -4)}****`;
+}
+
+function ValueCard({ resident, compact = false, cardRef, showPin = false }: { resident: ResidentProfile; compact?: boolean; cardRef?: React.RefObject<HTMLDivElement | null>; showPin?: boolean }) {
   const card = resident.approvalStatus === 'APPROVED' && resident.card?.status === 'ACTIVE'
     ? resident.card
     : null;
@@ -272,7 +283,7 @@ function ValueCard({ resident, compact = false, cardRef }: { resident: ResidentP
     <div className={`value-card ${compact ? 'compact' : ''}`} ref={cardRef}>
       <div className="card-top"><div className="card-programme-title"><span>BERA</span><strong>Bodija<br />Value Card</strong><small>Value. Community. Growth.</small></div><span className={`card-active ${isActive ? '' : 'pending'}`}><i /> {card ? humanStatus(card.status) : 'Not issued'}</span></div>
       {card && <div className="qr"><QRCode value={card.qrToken} size={compact ? 68 : 126} bgColor="#ffffff" fgColor="#512b6c" /></div>}
-      <div className="member-details"><small>{resident.memberCategory}</small><h2>{resident.fullName}</h2><span>{card?.membershipId || 'Membership pending'}</span></div>
+      <div className="member-details"><small>{resident.memberCategory}</small><h2>{resident.fullName}</h2><span>{privateCardNumber(card?.membershipId, showPin)}</span></div>
       <div className="card-bottom"><div><small>Cluster</small><strong>{resident.neighbourhood}</strong></div><div><small>Valid until</small><strong>{formatDate(card?.expiresAt)}</strong></div></div>
     </div>
   );
@@ -374,7 +385,7 @@ function Directory({ token }: { token: string }) {
         <label className="select-wrap"><SlidersHorizontal size={17} /><select value={model} onChange={e => setModel(e.target.value)}><option>All benefits</option><option>Immediate</option><option>Accumulated</option></select><ChevronDown size={15} /></label>
       </section>
       <div className="result-head"><span>{filtered.length} approved offers</span><small>Offers are subject to each merchant's stated terms.</small></div>
-      {loading && <div className="admin-empty" style={{ minHeight: 160 }}><span>Loading offers…</span></div>}
+      {loading && <div className="admin-empty" style={{ minHeight: 160 }}><LoadingSpinner /></div>}
       {!loading && (
         <>
           <section className="directory-list">{visible.map(item => <BenefitRow key={item.id} item={item} />)}{visible.length === 0 && <div className="empty-state"><Search size={26} /><h3>No matching benefits</h3><p>Try a different category or search term.</p></div>}</section>
@@ -399,6 +410,7 @@ function CardPage({ resident, token }: { resident: ResidentProfile; token: strin
   const [renewalError, setRenewalError] = useState<string | null>(null);
   const [requestingRenewal, setRequestingRenewal] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [showCardPin, setShowCardPin] = useState(false);
 
   // Visitor passes
   const [passes, setPasses] = useState<VisitorPass[]>([]);
@@ -545,23 +557,23 @@ function CardPage({ resident, token }: { resident: ResidentProfile; token: strin
           </div>
         </div>
       )}
-      <ValueCard resident={resident} cardRef={cardRef} />
+      <ValueCard resident={resident} cardRef={cardRef} showPin={showCardPin} />
       <div className="card-actions">
-        <button className="primary-button" disabled={!active}>
-          <ShieldCheck size={17} /> {active ? 'Show verification code' : suspended ? 'Card suspended' : rejected ? 'Application rejected' : 'Approval pending'}
+        <button className="primary-button" disabled={!active} onClick={() => setShowCardPin(value => !value)} aria-pressed={showCardPin}>
+          {showCardPin ? <EyeOff size={17} /> : <Eye size={17} />} {active ? (showCardPin ? 'Hide card PIN' : 'Show card PIN') : suspended ? 'Card suspended' : rejected ? 'Application rejected' : 'Approval pending'}
         </button>
         <button className="secondary-button" type="button" onClick={requestRenewalNow} disabled={!canRequestRenewal || requestingRenewal}>
-          <Clock3 size={17} /> {requestingRenewal ? 'Submitting…' : renewalState?.hasPendingRenewal ? 'Renewal pending' : 'Request renewal'}
+          {requestingRenewal ? <LoadingSpinner /> : <><Clock3 size={17} /> {renewalState?.hasPendingRenewal ? 'Renewal pending' : 'Request renewal'}</>}
         </button>
         <button className="outline-button" type="button" onClick={downloadCard} disabled={downloading || !card}>
-          <Download size={17} /> {downloading ? 'Saving…' : 'Download card'}
+          {downloading ? <LoadingSpinner /> : <><Download size={17} /> Download card</>}
         </button>
       </div>
       <div className="status-panel">
         <div><span className={`status-dot ${active ? '' : 'pending'}`} /><div><strong>Membership {humanStatus(card?.status || resident.approvalStatus)}</strong><small>{active ? `Verified by BERA on ${formatDate(card?.issuedAt)}` : 'BERA will review the submitted resident details'}</small></div></div>
         <div><span>Issue date</span><strong>{formatDate(card?.issuedAt)}</strong></div>
         <div><span>Expiry date</span><strong>{formatDate(card?.expiresAt)}</strong></div>
-        <div><span>Renewal window</span><strong>{loadingRenewals ? 'Loading…' : formatRenewalWindow(renewalState?.daysUntilExpiry ?? null)}</strong></div>
+        <div><span>Renewal window</span><strong>{loadingRenewals ? <LoadingSpinner /> : formatRenewalWindow(renewalState?.daysUntilExpiry ?? null)}</strong></div>
       </div>
       {renewalError && <div className="auth-error" role="alert">{renewalError}</div>}
       {latestRenewal && (
@@ -600,7 +612,7 @@ function CardPage({ resident, token }: { resident: ResidentProfile; token: strin
               maxLength={60}
             />
             <button className="primary-button" type="submit" disabled={creatingPass}>
-              {creatingPass ? 'Generating…' : 'Generate code'}
+              {creatingPass ? <LoadingSpinner /> : 'Generate code'}
             </button>
             <button className="outline-button" type="button" onClick={() => setShowPassForm(false)}>
               Cancel
@@ -611,7 +623,7 @@ function CardPage({ resident, token }: { resident: ResidentProfile; token: strin
         {passError && <div className="auth-error" role="alert" style={{ marginBottom: 10 }}>{passError}</div>}
 
         {passesLoading ? (
-          <p className="pass-inactive-note">Loading passes…</p>
+          <div className="inline-loading"><LoadingSpinner /></div>
         ) : passes.length === 0 ? (
           <p className="pass-inactive-note">No visitor passes yet.{active ? ' Create one above.' : ''}</p>
         ) : (
@@ -862,7 +874,7 @@ function ProfilePage({ resident, token, onProfileUpdated }: { resident: Resident
         <label><span>Enumerator phone</span><div className="auth-input"><input value={form.enumeratorPhone} onChange={e => setForm(f => ({ ...f, enumeratorPhone: e.target.value }))} /></div></label>
         <div className="profile-actions">
           <button className="primary-button" type="submit" disabled={saving}>
-            {saving ? 'Saving…' : 'Save profile'}
+            {saving ? <LoadingSpinner /> : 'Save profile'}
           </button>
         </div>
       </form>
@@ -1061,7 +1073,7 @@ function DependantsPage({ token }: { token: string }) {
               <div className="modal-actions">
                 <button type="button" className="secondary-button" onClick={closeForm}>Cancel</button>
                 <button type="submit" className="primary-button" disabled={saving}>
-                  {saving ? 'Saving…' : editingId ? 'Save changes' : 'Submit for approval'}
+                  {saving ? <LoadingSpinner /> : editingId ? 'Save changes' : 'Submit for approval'}
                 </button>
               </div>
             </form>
@@ -1070,7 +1082,7 @@ function DependantsPage({ token }: { token: string }) {
       )}
 
       {/* Dependants list */}
-      {loading && <div className="admin-empty" style={{ minHeight: 160 }}><span>Loading dependants…</span></div>}
+      {loading && <div className="admin-empty" style={{ minHeight: 160 }}><LoadingSpinner /></div>}
       {!loading && dependants.length === 0 && (
         <div className="empty-state">
           <Users size={28} />
@@ -1208,12 +1220,12 @@ function SupportPage({ token }: { token: string }) {
           <div className="auth-input"><textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Tell us what happened and what outcome you need." rows={5} /></div>
         </label>
         <div className="profile-actions">
-          <button className="primary-button" type="submit" disabled={saving}>{saving ? 'Submitting…' : 'Submit support request'}</button>
+          <button className="primary-button" type="submit" disabled={saving}>{saving ? <LoadingSpinner /> : 'Submit support request'}</button>
         </div>
       </form>
       <div className="section-block compact-section" style={{ marginTop: 20 }}>
         <div className="section-title"><div><h3>Your support requests</h3><p>Recent resident complaints and disputes</p></div></div>
-        {loading && <div className="admin-empty" style={{ minHeight: 120 }}><span>Loading requests…</span></div>}
+        {loading && <div className="admin-empty" style={{ minHeight: 120 }}><LoadingSpinner /></div>}
         {!loading && complaints.length === 0 && <div className="empty-state"><CircleHelp size={24} /><h3>No requests yet</h3><p>Submit a support ticket and BERA will review it.</p></div>}
         {!loading && complaints.map(item => (
           <div className="activity-item" key={item.id}>
@@ -1410,7 +1422,7 @@ export default function App() {
   };
 
   if (checkingSession) {
-    return <div className="session-loading"><div className="brand-mark"><span>B</span></div><span>Loading resident portal...</span></div>;
+    return <div className="session-loading"><LoadingSpinner /></div>;
   }
 
   return session ? <ResidentPortal session={session} logout={logout} /> : <AuthScreen onAuthenticated={authenticated} />;
