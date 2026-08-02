@@ -756,7 +756,7 @@ function Login({ onLogin }) {
         <button type="button" className="install-login" onClick={installApp}>
           Install SIGAR app
         </button>
-        <p className="powered-by"><span /> Encrypted command access · Powered by GIS Kosult</p>
+        <p className="powered-by"><span /> Encrypted command access · Powered by GIS Konsult</p>
       </form>
     </main>
   );

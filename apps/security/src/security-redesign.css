@@ -641,3 +641,19 @@ button:active { transform: translateY(1px); }
   .login-card{padding-block:14px}.mobile-login-brand{margin-bottom:10px;padding-bottom:10px}.mobile-login-brand .crest{width:34px;height:34px;flex-basis:34px}.security-role-lockup{margin-bottom:6px}.login-card label{margin-top:7px}.login-card input{height:40px;min-height:40px}.remember-row{margin-top:6px}.login-card .primary{height:42px;min-height:42px;margin-top:8px}.install-login{display:none}.powered-by{margin-top:6px}
 }
 @media(max-width:760px) and (max-height:500px){.mobile-login-brand,.powered-by{display:none}.login-card{max-width:400px}}
+
+/* Reliable internal scrolling for the fixed security workspace */
+.app-shell{grid-template:minmax(0,1fr)/auto minmax(0,1fr);overflow:hidden}
+.app-shell>.command-sidebar,.app-shell>.map-wrap{grid-row:1;min-height:0}
+.command-sidebar{overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
+.sidebar-panel-view,.sidebar-detail,.sidebar-tools-grid,.incident-list{min-height:0}
+.modal-backdrop{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.modal{max-height:min(90dvh,900px);overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.camera-panel,.chat-panel,.analytics-panel,.detail{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+@media(max-width:760px){
+  .app-shell{grid-template:1fr/1fr}
+  .app-shell>.command-sidebar,.app-shell>.map-wrap{grid-row:1}
+  .command-sidebar{max-height:calc(100dvh - 16px);overflow-y:auto}
+  .modal-backdrop{align-items:flex-start;padding-block:max(8px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-bottom))}
+  .modal{max-height:calc(100dvh - 16px)}
+}
