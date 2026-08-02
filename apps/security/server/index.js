@@ -486,14 +486,10 @@ const accessPointOnLocation = (req, res, next) => {
   if (req.user?.role !== 'Access Point') return next();
   const fix = accessPointGps.get(userIdOf(req.user));
   if (!fix || Date.now() - fix.receivedAt > 45000) {
-    return res.status(403).json({ message: 'A current GPS location is required at the assigned access point.' });
+    return res.status(403).json({ message: 'A current live GPS location is required so the control room can track you.' });
   }
   if (Number(fix.accuracy) > 150) {
     return res.status(403).json({ message: 'GPS accuracy is too low. Wait for a precise location fix.' });
-  }
-  const distance = distanceMeters(fix, req.user);
-  if (distance > 250) {
-    return res.status(403).json({ message: `You are outside your assigned access point (${Math.round(distance)}m away).` });
   }
   next();
 };

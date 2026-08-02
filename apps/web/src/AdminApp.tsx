@@ -1424,17 +1424,41 @@ function AdminDashboard({ token, admin, logout }: { token: string; admin: AdminI
     { label: 'Suspended', value: data.counts.suspended, icon: Ban, tone: 'suspended' },
   ], [data.counts]);
 
+  const adminNav = [
+    { id: 'residents', label: 'Residents', icon: UserCheck },
+    { id: 'dependants', label: 'Dependants', icon: Users },
+    { id: 'positions', label: 'Positions', icon: ShieldCheck },
+    { id: 'renewals', label: 'Renewals', icon: Clock3 },
+    { id: 'merchants', label: 'Merchants', icon: Store },
+    { id: 'offers', label: 'Offers', icon: CheckCircle2 },
+    { id: 'complaints', label: 'Complaints', icon: MessageSquare },
+    { id: 'transactions', label: 'Transactions', icon: BarChart2 },
+    { id: 'reports', label: 'Reports', icon: BadgeCheck },
+    { id: 'walkins', label: 'Walk-ins', icon: Bell },
+    { id: 'stickers', label: 'Stickers', icon: Download },
+    { id: 'cards', label: 'Cards', icon: Download },
+  ] as const;
+
   return (
-    <div className="admin-shell">
-      <header className="admin-header">
-        <AdminBrand />
-        <div className="admin-account">
+    <div className="admin-shell portal-shell admin-portal-shell">
+      <aside className="portal-sidebar">
+        <div className="portal-sidebar-brand"><AdminBrand /></div>
+        <nav className="portal-nav" aria-label="Admin navigation">
+          {adminNav.map(({ id, label, icon: Icon }) => <button key={id} className={section === id ? 'active' : ''} onClick={() => setSection(id)}><Icon size={18} /><span>{label}</span></button>)}
+        </nav>
+        <div className="portal-sidebar-footer">
+          <div className="portal-user-avatar">{admin.email.slice(0, 2).toUpperCase()}</div>
           <div><strong>{admin.email}</strong><small>{admin.adminRole ? admin.adminRole.replace(/_/g, ' ') : 'Administrator'}</small></div>
           <button onClick={logout} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
         </div>
+      </aside>
+
+      <header className="portal-mobile-header">
+        <AdminBrand />
+        <button onClick={logout} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
       </header>
 
-      <main className="admin-main">
+      <main className="admin-main portal-content">
         <section className="admin-title">
           <div>
             <span>BERA administration</span>
@@ -1452,46 +1476,6 @@ function AdminDashboard({ token, admin, logout }: { token: string; admin: AdminI
             </div>
           ))}
         </section>
-
-        {/* Section tab switcher */}
-        <div className="admin-section-tabs">
-          <button className={section === 'residents' ? 'active' : ''} onClick={() => setSection('residents')}>
-            <UserCheck size={16} /> Residents
-          </button>
-          <button className={section === 'dependants' ? 'active' : ''} onClick={() => setSection('dependants')}>
-            <Users size={16} /> Dependants
-          </button>
-          <button className={section === 'positions' ? 'active' : ''} onClick={() => setSection('positions')}>
-            <ShieldCheck size={16} /> Positions
-          </button>
-          <button className={section === 'renewals' ? 'active' : ''} onClick={() => setSection('renewals')}>
-            <Clock3 size={16} /> Renewals
-          </button>
-          <button className={section === 'merchants' ? 'active' : ''} onClick={() => setSection('merchants')}>
-            <Store size={16} /> Merchants
-          </button>
-          <button className={section === 'offers' ? 'active' : ''} onClick={() => setSection('offers')}>
-            <CheckCircle2 size={16} /> Offers
-          </button>
-          <button className={section === 'complaints' ? 'active' : ''} onClick={() => setSection('complaints')}>
-            <MessageSquare size={16} /> Complaints
-          </button>
-          <button className={section === 'transactions' ? 'active' : ''} onClick={() => setSection('transactions')}>
-            <BarChart2 size={16} /> Transactions
-          </button>
-          <button className={section === 'reports' ? 'active' : ''} onClick={() => setSection('reports')}>
-            <BadgeCheck size={16} /> Reports
-          </button>
-          <button className={section === 'walkins' ? 'active' : ''} onClick={() => setSection('walkins')}>
-            <Bell size={16} /> Walk-ins
-          </button>
-          <button className={section === 'stickers' ? 'active' : ''} onClick={() => setSection('stickers')}>
-            <Download size={16} /> Stickers
-          </button>
-          <button className={section === 'cards' ? 'active' : ''} onClick={() => setSection('cards')}>
-            <Download size={16} /> Cards
-          </button>
-        </div>
 
         {section === 'residents'    && <ResidentsPanel token={token} />}
         {section === 'dependants'   && <DependantsPanel token={token} />}

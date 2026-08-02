@@ -15,17 +15,8 @@ import { io } from "socket.io-client";
 
 const API = "/api";
 const SCAN_COOLDOWN = 3000;
-const ACCESS_RADIUS_METRES = 250;
 const MAX_GPS_ACCURACY_METRES = 150;
 const GPS_STALE_MS = 45000;
-
-function distanceMetres(lat1, lng1, lat2, lng2) {
-  const toRad = value => value * Math.PI / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 // ── QR helpers (same as AccessScanner) ───────────────────────────────────
 async function decodeQR(source) {
@@ -74,7 +65,6 @@ export default function AccessPointApp({ session, onLogout }) {
   const [gpsActive, setGpsActive] = useState(false);
   const [locationAllowed, setLocationAllowed] = useState(false);
   const [locationState, setLocationState] = useState("checking");
-  const [locationDistance, setLocationDistance] = useState(null);
 
   // Camera share
   const [sharingCamera, setSharingCamera] = useState(false);
@@ -138,18 +128,13 @@ export default function AccessPointApp({ session, onLogout }) {
     setLocationState("checking");
     gpsRef.current = navigator.geolocation.watchPosition(
       pos => {
-        const expectedLat = Number(session.user.lat);
-        const expectedLng = Number(session.user.lng);
-        const distance = distanceMetres(pos.coords.latitude, pos.coords.longitude, expectedLat, expectedLng);
         const accurate = Number(pos.coords.accuracy) <= MAX_GPS_ACCURACY_METRES;
-        const withinGate = distance <= ACCESS_RADIUS_METRES;
         const pt = { userId: session.user.id, lat: pos.coords.latitude, lng: pos.coords.longitude, speed: pos.coords.speed || 0, heading: pos.coords.heading || 0, accuracy: pos.coords.accuracy, timestamp: new Date().toISOString() };
         (socket || socketRef.current)?.emit("gps:update", pt);
         lastGpsRef.current = Date.now();
-        setLocationDistance(Math.round(distance));
         setGpsActive(true);
-        setLocationAllowed(accurate && withinGate);
-        setLocationState(!accurate ? "inaccurate" : withinGate ? "allowed" : "outside");
+        setLocationAllowed(accurate);
+        setLocationState(accurate ? "allowed" : "inaccurate");
       },
       error => {
         setGpsActive(false);
@@ -206,10 +191,9 @@ export default function AccessPointApp({ session, onLogout }) {
 
   if (!locationAllowed) {
     const messages = {
-      checking: ["Confirming gate location", "Keep location services on while SIGAR confirms that you are at your assigned access point."],
+      checking: ["Connecting live location", "Keep location services on while SIGAR connects your position to the control room."],
       denied: ["Location permission required", "Enable precise location for SIGAR in your browser or phone settings, then try again."],
-      outside: ["Outside assigned access point", `You are approximately ${locationDistance ?? "—"} metres from your assigned gate. Access is available within ${ACCESS_RADIUS_METRES} metres.`],
-      inaccurate: ["Waiting for a precise GPS fix", "Move to an open area near the gate and keep precise location enabled."],
+      inaccurate: ["Waiting for a precise GPS fix", "Move to an open area and keep precise location enabled so the control room can see you."],
       stale: ["Location signal lost", "SIGAR must receive a live location continuously. Reconnect GPS to continue."],
       unavailable: ["Location currently unavailable", "Check your phone's location service and network, then try again."],
       unsupported: ["Location is not supported", "Use a device and browser that supports secure GPS location."],
@@ -221,7 +205,7 @@ export default function AccessPointApp({ session, onLogout }) {
         <small>ACCESS POINT SECURITY</small>
         <h1>{title}</h1>
         <p>{detail}</p>
-        <div className="ap-location-assignment"><span>Assigned post</span><strong>{session.user.unit || "Bodija Gate"}</strong></div>
+        <div className="ap-location-assignment"><span>Tracking status</span><strong>Live GPS required</strong></div>
         <button className="ap-location-retry" onClick={() => { stopGps(); startGps(socketRef.current); }}>Retry live location</button>
         <button className="ap-location-signout" onClick={onLogout}>Sign out</button>
       </div>

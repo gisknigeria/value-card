@@ -1397,15 +1397,38 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
     return () => { socketRef.current?.disconnect(); };
   }, [isApproved, m.id, session.accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const merchantNav: Array<{ id: MerchantView; label: string; icon: typeof Store; visible?: boolean; badge?: number }> = [
+    { id: 'overview', label: 'Overview', icon: Store },
+    { id: 'card', label: 'My card', icon: QrCode },
+    { id: 'benefits', label: 'Benefits', icon: Tag },
+    { id: 'activity', label: 'My activity', icon: RefreshCw },
+    { id: 'visitors', label: 'Visitor codes', icon: QrCode },
+    { id: 'scan', label: 'Scan & log', icon: ShieldCheck, visible: canScanCards && isApproved },
+    { id: 'offers', label: 'Offers', icon: Tag, visible: isOwner },
+    { id: 'transactions', label: 'Transactions', icon: RefreshCw, visible: isOwner && isApproved },
+    { id: 'reports', label: 'Reports', icon: BarChart2, visible: isOwner && isApproved },
+    { id: 'walkins', label: 'Walk-ins', icon: Bell, visible: isOwner && isApproved, badge: pendingWalkIns },
+    { id: 'staff', label: 'Staff', icon: Users, visible: isOwner },
+    { id: 'profile', label: 'Profile', icon: UserRound },
+  ];
+
   return (
-    <div className="admin-shell">
+    <div className="admin-shell portal-shell merchant-portal-shell">
       {showChangePw && (
         <ChangePasswordPanel token={session.accessToken} onClose={() => setShowChangePw(false)} />
       )}
 
-      <header className="admin-header">
-        <MerchantBrand />
-        <div className="admin-account">
+      <aside className="portal-sidebar">
+        <div className="portal-sidebar-brand"><MerchantBrand /></div>
+        <nav className="portal-nav" aria-label="Merchant navigation">
+          {merchantNav.map(({ id, label, icon: Icon, visible = true, badge }) => visible && <button key={id} className={view === id ? 'active' : ''} onClick={() => { setView(id); if (id === 'walkins') setPendingWalkIns(0); }}><Icon size={18} /><span>{label}</span>{Boolean(badge) && <em>{badge}</em>}</button>)}
+        </nav>
+        <div className="portal-quick-actions">
+          <button onClick={() => setShowChangePw(true)}><KeyRound size={17} /><span>Password</span></button>
+          <button onClick={() => setView('notifications')}><Bell size={17} /><span>Alerts</span>{unreadCount > 0 && <em>{unreadCount}</em>}</button>
+          <button className="danger" onClick={() => void sendSos()} disabled={sosSending}><AlertTriangle size={17} /><span>SOS</span></button>
+        </div>
+        <div className="admin-account portal-sidebar-footer">
           <div><strong>{m.businessName}</strong><small>{mu.role === 'OWNER' ? 'Owner' : 'Sales staff'} · {m.category}</small></div>
           <button onClick={() => setShowChangePw(true)} title="Change password" aria-label="Change password" style={{ marginRight: 6 }}><KeyRound size={18} /></button>
           <button onClick={() => setView('notifications')} title="Notifications" aria-label="Notifications" style={{ marginRight: 6, position: 'relative' }}>
@@ -1414,9 +1437,18 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
           <button onClick={() => void sendSos()} disabled={sosSending} title="Send SOS" aria-label="Send SOS" style={{ marginRight: 6, color: '#b42318' }}><AlertTriangle size={18} /></button>
           <button onClick={logout} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
         </div>
+      </aside>
+
+      <header className="portal-mobile-header">
+        <MerchantBrand />
+        <div className="portal-mobile-actions">
+          <button onClick={() => setView('notifications')} aria-label="Notifications"><Bell size={18} />{unreadCount > 0 && <em>{unreadCount}</em>}</button>
+          <button className="danger" onClick={() => void sendSos()} disabled={sosSending} aria-label="Send SOS"><AlertTriangle size={18} /></button>
+          <button onClick={logout} aria-label="Sign out"><LogOut size={18} /></button>
+        </div>
       </header>
 
-      <main className="admin-main">
+      <main className="admin-main portal-content">
         <section className="admin-title">
           <div>
             <span>Merchant portal</span>

@@ -706,6 +706,11 @@ function Login({ onLogin }) {
         </div>
       </section>
       <form className="login-card" onSubmit={submit}>
+        <div className="mobile-login-brand">
+          <div className="crest mini eye-logo">S</div>
+          <div><b>SIGAR</b><span>Bodija Security Operations</span></div>
+          <i><span /> Live</i>
+        </div>
         <div className="security-role-lockup"><small>Authorized personnel only</small><strong>Command sign in</strong></div>
         <p className="login-instruction">Use your issued Bodija security credentials.</p>
         <label>
@@ -1924,20 +1929,10 @@ function OfficerManager({
 
               {form.role === "Access Point" && <>
                 <label>
-                  Assigned gate name
+                  Default gate name
                   <input required value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="e.g. Main Gate" />
                 </label>
-                <div className="two-col">
-                  <label>
-                    Gate latitude
-                    <input required type="number" step="any" value={form.lat} onChange={(e) => setForm({ ...form, lat: e.target.value })} />
-                  </label>
-                  <label>
-                    Gate longitude
-                    <input required type="number" step="any" value={form.lng} onChange={(e) => setForm({ ...form, lng: e.target.value })} />
-                  </label>
-                </div>
-                <small className="gate-location-help">Access Point officers can only operate within 250 metres of these coordinates.</small>
+                <small className="gate-location-help">Live GPS remains on so the control room can track the officer anywhere.</small>
               </>}
 
               {error && <div className="error">{error}</div>}
@@ -3769,7 +3764,7 @@ function Dashboard({ session, onLogout }) {
   const officers = useMemo(
     () =>
       users
-        .filter((u) => u.role === "Officer")
+        .filter((u) => ["Officer", "Access Point"].includes(u.role))
         .map((u, index) => {
           const live = gpsPositions[u.id];
           return {
