@@ -1188,3 +1188,35 @@ h1, h2, h3, p { margin: 0; }
   .app-shell>.mobile-nav button{min-width:0;padding:5px 2px;white-space:nowrap;overflow:hidden}
   .app-shell>.mobile-nav button span{display:block;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
 }
+
+/* Card-first dashboards and a single-row resident mobile header */
+.overview-card-lead{width:min(620px,100%);margin:0 0 22px}
+.overview-metrics-grid{display:block!important}.overview-metrics-grid>.metrics{width:100%}
+.role-card-lead{margin-bottom:24px!important}
+@media(max-width:760px){
+  .main-area>.topbar{
+    width:100%;
+    height:64px!important;
+    min-height:64px!important;
+    display:flex;
+    flex-wrap:nowrap!important;
+    align-items:center!important;
+    gap:9px!important;
+    padding:0 12px!important;
+  }
+  .main-area>.topbar>.menu-button{flex:0 0 38px}
+  .main-area>.topbar>div:nth-child(2){min-width:0;max-width:none!important;flex:1;margin:0!important}
+  .main-area>.topbar .eyebrow{display:none}
+  .main-area>.topbar h1{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:17px!important}
+  .main-area>.topbar>.top-actions{width:auto!important;min-width:max-content;display:flex;flex:0 0 auto;flex-wrap:nowrap!important;justify-content:flex-end;gap:7px!important;margin:0!important}
+  .main-area>.topbar .sos-button{height:38px;min-height:38px;padding:0 12px!important;font-size:10px!important}
+  .main-area>.topbar .notification{width:38px!important;height:38px!important;flex:0 0 38px}
+  .main-area>.topbar .top-avatar{display:none}
+  .overview-card-lead{width:100%;margin-bottom:18px}
+  .overview-card-lead .value-card{width:100%;max-width:none}
+  .welcome-line{margin-bottom:18px}
+  .role-card-lead{max-width:100%!important;margin-bottom:18px!important}
+}
+@media(max-width:370px){
+  .main-area>.topbar{gap:6px!important;padding-inline:8px!important}.main-area>.topbar .sos-button{padding-inline:9px!important}.main-area>.topbar h1{font-size:15px!important}
+}

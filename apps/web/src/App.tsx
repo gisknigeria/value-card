@@ -313,9 +313,11 @@ function Overview({ setView, resident, dashboard }: { setView: (v: View) => void
   const activity = dashboard?.recentActivity.slice(0, 2) ?? [];
   return (
     <div className="page-content">
-      <section className="welcome-line"><div><h2>Welcome, {firstName(resident.fullName)}</h2><p>{cardActive ? 'Your card is active and ready to use across approved Bodija merchants.' : 'Your digital card has been created and will activate after your resident application is approved.'}</p></div><button className="primary-button" onClick={() => setView(cardActive ? 'directory' : 'card')}>{cardActive ? <Search size={17} /> : <CreditCard size={17} />} {cardActive ? 'Find a benefit' : 'View my card'}</button></section>
-      <section className="overview-grid">
+      <section className="overview-card-lead">
         <ValueCard resident={resident} compact />
+      </section>
+      <section className="welcome-line"><div><h2>Welcome, {firstName(resident.fullName)}</h2><p>{cardActive ? 'Your card is active and ready to use across approved Bodija merchants.' : 'Your digital card has been created and will activate after your resident application is approved.'}</p></div><button className="primary-button" onClick={() => setView(cardActive ? 'directory' : 'card')}>{cardActive ? <Search size={17} /> : <CreditCard size={17} />} {cardActive ? 'Find a benefit' : 'View my card'}</button></section>
+      <section className="overview-grid overview-metrics-grid">
         <div className="metrics">
           <div className="metric"><span className="metric-icon savings"><Tag size={19} /></span><div><small>Saved this month</small><strong>{overviewCurrency(metrics?.savedThisMonth ?? 0)}</strong><em>{dashboard?.recentActivity.length ? `Across ${dashboard.recentActivity.length} recent interactions` : 'No recorded savings yet'}</em></div></div>
           <div className="metric"><span className="metric-icon rewards"><Gift size={19} /></span><div><small>Reward balance</small><strong>{overviewCurrency(metrics?.rewardBalance ?? 0)}</strong><em>{dashboard?.rewardBalances.length ? `At ${dashboard.rewardBalances.length} merchants` : 'No active merchant reward balances'}</em></div></div>

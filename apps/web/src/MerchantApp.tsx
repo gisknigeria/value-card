@@ -1514,7 +1514,7 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
           </button>
         </div>
 
-        {view === 'overview'     && <MerchantOverview m={m} isApproved={isApproved} isOwner={isOwner} setView={setView} pendingWalkIns={pendingWalkIns} />}
+        {view === 'overview'     && <><RoleAccessCard mu={mu} lead /><MerchantOverview m={m} isApproved={isApproved} isOwner={isOwner} setView={setView} pendingWalkIns={pendingWalkIns} /></>}
         {view === 'card'         && <RoleAccessCard mu={mu} />}
         {view === 'benefits'     && <PersonalBenefits data={mu.user.resident?.approvalStatus === 'APPROVED' ? memberData : null} />}
         {view === 'activity'     && <PersonalActivity data={mu.user.resident?.approvalStatus === 'APPROVED' ? memberData : null} />}
@@ -1533,7 +1533,7 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
   );
 }
 
-function RoleAccessCard({ mu }: { mu: MerchantUserProfile }) {
+function RoleAccessCard({ mu, lead = false }: { mu: MerchantUserProfile; lead?: boolean }) {
   const card = mu.user.accessCard?.status === 'ACTIVE' ? mu.user.accessCard : null;
   const name = mu.user.displayName || (mu.role === 'OWNER' ? mu.merchant.contactPerson : 'Merchant staff');
   const cardRef = useRef<HTMLDivElement>(null);
@@ -1551,7 +1551,7 @@ function RoleAccessCard({ mu }: { mu: MerchantUserProfile }) {
     } finally { setDownloading(false); }
   };
   return (
-    <section className="role-card-shell admin-workspace" style={{ marginTop: 24, padding: 24, maxWidth: 560 }}>
+    <section className={`role-card-shell admin-workspace ${lead ? 'role-card-lead' : ''}`} style={{ marginTop: lead ? 0 : 24, padding: 24, maxWidth: 560 }}>
       <div ref={cardRef} style={{ display: 'flex', justifyContent: 'space-between', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
         <div className="role-card-details">
           <small style={{ color: 'var(--muted)', fontWeight: 800 }}>BERA · BODIJA VALUE CARD</small>
