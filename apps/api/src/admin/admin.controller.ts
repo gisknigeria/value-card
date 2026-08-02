@@ -84,6 +84,11 @@ export class AdminController {
     return this.admin.stickers(downloaded === 'true', req.user.userId);
   }
 
+  @Get('cards')
+  cards(@Req() req: AuthRequest) {
+    return this.admin.cards(req.user.userId);
+  }
+
   @Post('stickers/export')
   exportStickers(@Req() req: AuthRequest, @Body() input: StickerExportDto) {
     return this.admin.markStickersExported(input.residentIds, req.user.userId);

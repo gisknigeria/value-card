@@ -93,6 +93,32 @@ export class AdminService {
     });
   }
 
+  async cards(adminUserId?: string) {
+    const scope = await this.residentScope(adminUserId);
+    return this.prisma.resident.findMany({
+      where: {
+        ...scope,
+        approvalStatus: ApprovalStatus.APPROVED,
+        card: { is: { status: CardStatus.ACTIVE } },
+      },
+      select: {
+        id: true,
+        fullName: true,
+        neighbourhood: true,
+        memberCategory: true,
+        card: {
+          select: {
+            membershipId: true,
+            qrToken: true,
+            status: true,
+            expiresAt: true,
+          },
+        },
+      },
+      orderBy: [{ neighbourhood: 'asc' }, { fullName: 'asc' }],
+    });
+  }
+
   async markStickersExported(residentIds: string[], adminUserId: string) {
     const ids = [...new Set(residentIds.filter(Boolean))];
     if (!ids.length) throw new BadRequestException('Select at least one resident');

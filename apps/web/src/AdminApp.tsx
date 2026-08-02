@@ -1256,6 +1256,84 @@ interface StickerResident {
   card: { membershipId: string; qrToken: string };
 }
 
+interface CardExportResident {
+  id: string;
+  fullName: string;
+  neighbourhood: string;
+  memberCategory: string;
+  card: {
+    membershipId: string;
+    qrToken: string;
+    status: string;
+    expiresAt: string | null;
+  };
+}
+
+function CardExportsPanel({ token }: { token: string }) {
+  const [items, setItems] = useState<CardExportResident[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [message, setMessage] = useState('');
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const load = useCallback(async () => {
+    setLoading(true); setMessage('');
+    try {
+      const result = await apiRequest<CardExportResident[]>('/api/admin/cards', { headers: { Authorization: `Bearer ${token}` } });
+      setItems(result);
+      setSelected(result.map((item) => item.id));
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to load resident cards'); }
+    finally { setLoading(false); }
+  }, [token]);
+
+  useEffect(() => { void load(); }, [load]);
+  const toggle = (id: string) => setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  const selectAll = () => setSelected(selected.length === items.length ? [] : items.map((item) => item.id));
+
+  const exportCards = async (ids: string[]) => {
+    if (!ids.length) return;
+    setExporting(true); setMessage('');
+    try {
+      const { default: html2canvas } = await import('html2canvas');
+      for (const id of ids) {
+        const node = cardRefs.current[id];
+        const resident = items.find((item) => item.id === id);
+        if (!node || !resident) continue;
+        const canvas = await html2canvas(node, { scale: 3, backgroundColor: '#512b6c', useCORS: true });
+        const link = document.createElement('a');
+        link.download = `bodija-value-card-${resident.card.membershipId}-${resident.fullName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        await new Promise((resolve) => window.setTimeout(resolve, 120));
+      }
+      setMessage(`${ids.length} card${ids.length === 1 ? '' : 's'} downloaded successfully.`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to create card downloads'); }
+    finally { setExporting(false); }
+  };
+
+  return <section className="sticker-workspace card-export-workspace">
+    <div className="sticker-intro">
+      <div><span>Membership cards</span><h2>Card exports</h2><p>Select any active residents and download print-ready digital cards in bulk. Each card includes the resident's live verification QR code.</p></div>
+    </div>
+    <div className="sticker-toolbar"><label><input type="checkbox" checked={items.length > 0 && selected.length === items.length} onChange={selectAll} /> Select all ({selected.length})</label><button className="primary-button" disabled={exporting || !selected.length} onClick={() => void exportCards(selected)}><Download size={17} /> {exporting ? 'Preparing cards…' : 'Bulk download cards'}</button></div>
+    {message && <div className={message.includes('successfully') ? 'profile-success' : 'auth-error'}>{message}</div>}
+    {loading ? <div className="admin-empty"><RefreshCw size={22} /><strong>Loading active cards…</strong></div> : items.length === 0 ? <div className="admin-empty"><BadgeCheck size={26} /><strong>No active resident cards</strong><span>Cards will appear here after resident approval and activation.</span></div> : <div className="sticker-grid card-export-grid">
+      {items.map((resident) => <article className={`sticker-record card-export-record ${selected.includes(resident.id) ? 'selected' : ''}`} key={resident.id}>
+        <label className="sticker-select"><input type="checkbox" checked={selected.includes(resident.id)} onChange={() => toggle(resident.id)} /><span>{resident.fullName}</span></label>
+        <small>{resident.neighbourhood} · {resident.card.membershipId}</small>
+        <div className="admin-card-render" ref={(node) => { cardRefs.current[resident.id] = node; }}>
+          <div className="admin-card-head"><div><span>BERA</span><strong>Bodija<br />Value Card</strong><small>Value. Community. Growth.</small></div><em><i /> ACTIVE</em></div>
+          <div className="admin-card-qr"><QRCode value={resident.card.qrToken} size={112} bgColor="#ffffff" fgColor="#512b6c" /></div>
+          <div className="admin-card-member"><small>{resident.memberCategory}</small><h3>{resident.fullName}</h3><span>{resident.card.membershipId}</span></div>
+          <div className="admin-card-foot"><div><small>Cluster</small><strong>{resident.neighbourhood}</strong></div><div><small>Valid until</small><strong>{resident.card.expiresAt ? formatDate(resident.card.expiresAt) : 'No expiry'}</strong></div></div>
+        </div>
+        <div className="sticker-record-foot"><span>Active membership card</span><button className="text-button" onClick={() => void exportCards([resident.id])}>Download one</button></div>
+      </article>)}
+    </div>}
+  </section>;
+}
+
 function StickerExportsPanel({ token }: { token: string }) {
   const [downloaded, setDownloaded] = useState(false);
   const [items, setItems] = useState<StickerResident[]>([]);
@@ -1323,7 +1401,7 @@ function StickerExportsPanel({ token }: { token: string }) {
   </section>;
 }
 
-type AdminSection = 'residents' | 'dependants' | 'positions' | 'renewals' | 'merchants' | 'offers' | 'complaints' | 'transactions' | 'reports' | 'walkins' | 'stickers';
+type AdminSection = 'residents' | 'dependants' | 'positions' | 'renewals' | 'merchants' | 'offers' | 'complaints' | 'transactions' | 'reports' | 'walkins' | 'cards' | 'stickers';
 
 function AdminDashboard({ token, admin, logout }: { token: string; admin: AdminIdentity; logout: () => void }) {
   const [section, setSection] = useState<AdminSection>('residents');
@@ -1410,6 +1488,9 @@ function AdminDashboard({ token, admin, logout }: { token: string; admin: AdminI
           <button className={section === 'stickers' ? 'active' : ''} onClick={() => setSection('stickers')}>
             <Download size={16} /> Stickers
           </button>
+          <button className={section === 'cards' ? 'active' : ''} onClick={() => setSection('cards')}>
+            <Download size={16} /> Cards
+          </button>
         </div>
 
         {section === 'residents'    && <ResidentsPanel token={token} />}
@@ -1423,6 +1504,7 @@ function AdminDashboard({ token, admin, logout }: { token: string; admin: AdminI
         {section === 'reports'      && <AdminReportsPanel token={token} />}
         {section === 'walkins'      && <AdminWalkInPanel token={token} />}
         {section === 'stickers'     && <StickerExportsPanel token={token} />}
+        {section === 'cards'        && <CardExportsPanel token={token} />}
       </main>
     </div>
   );
