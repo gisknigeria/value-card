@@ -1492,8 +1492,8 @@ function AdminMyCard({ token }: { token: string }) {
 
   if (loading) {
     return (
-      <div className="admin-workspace" style={{ marginTop: 24, padding: 32, display: 'flex', alignItems: 'center', gap: 12, color: 'var(--muted)' }}>
-        <RefreshCw size={18} /> Loading card…
+      <div className="admin-workspace" role="status" aria-label="Loading card" style={{ marginTop: 24, padding: 32, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <div className="loading-spinner" />
       </div>
     );
   }
@@ -1502,8 +1502,8 @@ function AdminMyCard({ token }: { token: string }) {
     <>
       <div className="admin-workspace" style={{ marginTop: 24, padding: 28, maxWidth: 560 }}>
         {/* Card visual */}
-        <div ref={cardRef} style={{ display: 'flex', justifyContent: 'space-between', gap: 20, alignItems: 'center', flexWrap: 'wrap', padding: 4 }}>
-          <div>
+        <div ref={cardRef} className="role-card-shell role-card-admin" style={{ display: 'flex', justifyContent: 'space-between', gap: 20, alignItems: 'center', flexWrap: 'wrap', padding: 24, maxWidth: 'none' }}>
+          <div className="role-card-details">
             <small style={{ color: 'var(--muted)', fontWeight: 800, fontSize: 11 }}>BERA · BODIJA VALUE CARD</small>
             <h2 style={{ margin: '8px 0 4px', fontSize: 22 }}>{adminFull?.email ?? 'Administrator'}</h2>
             <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
@@ -1522,7 +1522,7 @@ function AdminMyCard({ token }: { token: string }) {
               {card?.status?.toLowerCase().replace(/_/g, ' ') ?? 'no card'}
             </span>
           </div>
-          <div style={{ minWidth: 148, minHeight: 148, background: '#fff', borderRadius: 12, padding: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="role-card-qr" style={{ minWidth: 148, minHeight: 148 }}>
             {card
               ? <EncryptedQRCode token={card.qrToken} size={128} bgColor="#ffffff" fgColor="#1a3558" />
               : <CreditCard size={64} style={{ color: '#ccc' }} />
@@ -1743,6 +1743,6 @@ export default function AdminApp() {
 
   const logout = () => { localStorage.removeItem(ADMIN_TOKEN_KEY); setToken(''); setAdmin(null); };
 
-  if (checking) return <div className="session-loading"><BadgeCheck size={24} /><span>Checking administrator session...</span></div>;
+  if (checking) return <div className="session-loading" role="status" aria-label="Loading administrator portal"><div className="loading-spinner" /></div>;
   return token && admin ? <AdminDashboard token={token} admin={admin} logout={logout} /> : <AdminLogin onLogin={login} />;
 }

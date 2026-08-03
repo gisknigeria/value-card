@@ -1223,3 +1223,44 @@ h1, h2, h3, p { margin: 0; }
 @media(max-width:370px){
   .main-area>.topbar{gap:6px!important;padding-inline:8px!important}.main-area>.topbar .sos-button{padding-inline:9px!important}.main-area>.topbar h1{font-size:15px!important}
 }
+
+/* Membership card colours identify the holder's role at a glance. */
+.value-card.value-card-resident {
+  background: linear-gradient(145deg, #3d1a56 0%, #5b2878 58%, #73388f 100%) !important;
+  border-color: rgba(255, 180, 140, .82) !important;
+}
+.dependant-card.dependant-member-card {
+  background: linear-gradient(135deg, #eef6ff 0%, #e2edff 100%) !important;
+  border-color: #9dbbea !important;
+  box-shadow: inset 4px 0 #3569ad, 0 12px 34px rgba(35, 83, 145, .10) !important;
+}
+.dependant-member-card .dependant-avatar {
+  background: #d4e5ff !important;
+  color: #214f91 !important;
+}
+.role-card-shell.role-card-merchant-owner {
+  background: linear-gradient(145deg, #075244 0%, #087761 100%) !important;
+  border-color: rgba(103, 232, 190, .72) !important;
+  box-shadow: 0 22px 48px rgba(7, 82, 68, .24) !important;
+}
+.role-card-shell.role-card-merchant-staff {
+  background: linear-gradient(145deg, #07506a 0%, #087d91 100%) !important;
+  border-color: rgba(111, 225, 238, .72) !important;
+  box-shadow: 0 22px 48px rgba(7, 80, 106, .24) !important;
+}
+.role-card-merchant-staff .role-card-details > small,
+.role-card-merchant-staff .role-card-details p,
+.role-card-merchant-staff > p { color: #c7f5fb !important; }
+.role-card-merchant-staff .role-card-qr { border-color: #72deeb !important; }
+.role-card-shell.role-card-admin {
+  background: linear-gradient(145deg, #172b4d 0%, #263f70 62%, #354f82 100%) !important;
+  border-color: rgba(240, 190, 80, .75) !important;
+  color: #fff !important;
+  box-shadow: 0 22px 48px rgba(23, 43, 77, .26) !important;
+}
+.role-card-admin .role-card-details > small { color: #f4ce77 !important; }
+.role-card-admin .role-card-details h2,
+.role-card-admin .role-card-details strong { color: #fff !important; }
+.role-card-admin .role-card-details p,
+.role-card-admin > p { color: #d8e2f3 !important; }
+.role-card-admin .role-card-qr { border-color: #e9bd58 !important; }

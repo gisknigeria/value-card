@@ -1558,7 +1558,7 @@ function RoleAccessCard({ mu, token, lead = false }: { mu: MerchantUserProfile; 
 
   return (
     <>
-      <section className={`role-card-shell admin-workspace ${lead ? 'role-card-lead' : ''}`} style={{ marginTop: lead ? 0 : 24, padding: 24, maxWidth: 560 }}>
+      <section className={`role-card-shell role-card-merchant role-card-merchant-${mu.role.toLowerCase()} admin-workspace ${lead ? 'role-card-lead' : ''}`} style={{ marginTop: lead ? 0 : 24, padding: 24, maxWidth: 560 }}>
         <div ref={cardRef} style={{ display: 'flex', justifyContent: 'space-between', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
           <div className="role-card-details">
             <small style={{ color: 'var(--muted)', fontWeight: 800 }}>BERA · BODIJA VALUE CARD</small>
@@ -2107,9 +2107,8 @@ export default function MerchantApp() {
 
   if (checking) {
     return (
-      <div className="session-loading">
-        <div className="brand-mark"><span>B</span></div>
-        <span>Loading merchant portal…</span>
+      <div className="session-loading" role="status" aria-label="Loading merchant portal">
+        <div className="loading-spinner" />
       </div>
     );
   }

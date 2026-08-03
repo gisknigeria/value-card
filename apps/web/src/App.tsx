@@ -284,7 +284,7 @@ function ValueCard({ resident, compact = false, cardRef, showPin = false }: { re
     : null;
   const isActive = card?.status === 'ACTIVE';
   return (
-    <div className={`value-card ${compact ? 'compact' : ''}`} ref={cardRef}>
+    <div className={`value-card value-card-resident ${compact ? 'compact' : ''}`} ref={cardRef}>
       <div className="card-top"><div className="card-programme-title"><span>BERA</span><strong>Bodija<br />Value Card</strong><small>Value. Community. Growth.</small></div><span className={`card-active ${isActive ? '' : 'pending'}`}><i /> {card ? humanStatus(card.status) : 'Not issued'}</span></div>
       {card && <div className="qr"><EncryptedQRCode token={card.qrToken} size={compact ? 68 : 126} bgColor="#ffffff" fgColor="#291839" /></div>}
       <div className="member-details"><small>{resident.memberCategory}</small><h2>{resident.fullName}</h2><span>{privateCardNumber(card?.membershipId, showPin)}</span></div>
@@ -1221,7 +1221,7 @@ function DependantsPage({ token, resident }: { token: string; resident: Resident
             const tone = dependantStatusTone(d.approvalStatus);
             const isApproved = d.approvalStatus === 'APPROVED';
             return (
-              <article key={d.id} className="dependant-card">
+              <article key={d.id} className="dependant-card dependant-member-card">
                 <div className="dependant-avatar">{initials(d.fullName)}</div>
                 <div className="dependant-info">
                   <strong>{d.fullName}</strong>
