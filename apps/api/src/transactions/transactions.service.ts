@@ -103,6 +103,31 @@ export class TransactionsService {
       },
     });
 
+    // Notify the resident that their card was scanned at a merchant
+    if (!idempotencyKey) {
+      // Lookup the merchant name for a friendlier notification body
+      const merchant = await this.prisma.merchant.findUnique({
+        where: { id: merchantId },
+        select: { businessName: true },
+      });
+      const resident = await this.prisma.resident.findUnique({
+        where: { id: card.residentId },
+        select: { userId: true },
+      });
+      if (resident) {
+        await this.prisma.notification.create({
+          data: {
+            userId: resident.userId,
+            type: 'CARD_SCANNED_MERCHANT',
+            title: 'Card used at merchant',
+            body: allowed
+              ? `Your card (${card.membershipId}) was scanned at ${merchant?.businessName ?? 'a merchant'}.`
+              : `An attempt to use your card (${card.membershipId}) at ${merchant?.businessName ?? 'a merchant'} was denied — card is ${effectiveStatus.toLowerCase()}.`,
+          },
+        });
+      }
+    }
+
     // Minimum data only
     return {
       allowed,

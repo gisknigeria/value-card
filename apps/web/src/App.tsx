@@ -36,6 +36,8 @@ import {
   RefreshCw,
   Eye,
   EyeOff,
+  ShieldOff,
+  Flag,
 } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import AuthScreen from './AuthScreen';
@@ -69,6 +71,7 @@ import {
   getMyVisitorPasses,
   createVisitorPass,
   deleteVisitorPass,
+  deactivateMyCard,
   type VisitorPass,
 } from './api';
 
@@ -161,6 +164,8 @@ function notificationIcon(type: string) {
   if (type.includes('APPROVED')) return <CheckCircle2 size={18} />;
   if (type.includes('REJECTED')) return <XCircle size={18} />;
   if (type.includes('SUSPENDED')) return <AlertTriangle size={18} />;
+  if (type === 'CARD_SCANNED' || type === 'CARD_SCANNED_MERCHANT' || type === 'CARD_SCANNED_GATE') return <ShieldCheck size={18} />;
+  if (type === 'CARD_DEACTIVATED') return <ShieldOff size={18} />;
   return <Info size={18} />;
 }
 
@@ -168,6 +173,8 @@ function notificationTone(type: string): string {
   if (type.includes('APPROVED')) return 'notif-approved';
   if (type.includes('REJECTED')) return 'notif-rejected';
   if (type.includes('SUSPENDED')) return 'notif-suspended';
+  if (type === 'CARD_SCANNED' || type === 'CARD_SCANNED_MERCHANT' || type === 'CARD_SCANNED_GATE') return 'notif-info';
+  if (type === 'CARD_DEACTIVATED') return 'notif-rejected';
   return 'notif-info';
 }
 
@@ -399,7 +406,7 @@ function Directory({ token }: { token: string }) {
   );
 }
 
-function CardPage({ resident, token }: { resident: ResidentProfile; token: string }) {
+function CardPage({ resident, token, onCardDeactivated }: { resident: ResidentProfile; token: string; onCardDeactivated?: () => void }) {
   const card = resident.card;
   const active = card?.status === 'ACTIVE';
   const rejected = resident.approvalStatus === 'REJECTED';
@@ -410,6 +417,17 @@ function CardPage({ resident, token }: { resident: ResidentProfile; token: strin
   const [requestingRenewal, setRequestingRenewal] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [showCardPin, setShowCardPin] = useState(false);
+
+  // Deactivate card state
+  const [deactivating, setDeactivating] = useState(false);
+  const [deactivateError, setDeactivateError] = useState<string | null>(null);
+
+  // Report misuse state
+  const [showMisuseModal, setShowMisuseModal] = useState(false);
+  const [misuseDesc, setMisuseDesc] = useState('');
+  const [reportingMisuse, setReportingMisuse] = useState(false);
+  const [misuseError, setMisuseError] = useState<string | null>(null);
+  const [misuseSuccess, setMisuseSuccess] = useState<string | null>(null);
 
   // Visitor passes
   const [passes, setPasses] = useState<VisitorPass[]>([]);
@@ -518,6 +536,41 @@ function CardPage({ resident, token }: { resident: ResidentProfile; token: strin
     }
   };
 
+  const handleDeactivate = async () => {
+    if (!window.confirm('Deactivate your card? This will immediately block gate entry and merchant benefits. You will need to contact BERA to reactivate it.')) return;
+    setDeactivating(true);
+    setDeactivateError(null);
+    try {
+      await deactivateMyCard(token);
+      onCardDeactivated?.();
+    } catch (err) {
+      setDeactivateError(err instanceof Error ? err.message : 'Unable to deactivate card.');
+    } finally {
+      setDeactivating(false);
+    }
+  };
+
+  const handleReportMisuse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!misuseDesc.trim()) return;
+    setReportingMisuse(true);
+    setMisuseError(null);
+    setMisuseSuccess(null);
+    try {
+      await createComplaint(token, {
+        subject: 'Card misuse report',
+        description: misuseDesc.trim(),
+      });
+      setMisuseSuccess('Your report has been submitted. BERA will review it shortly.');
+      setMisuseDesc('');
+      setTimeout(() => { setShowMisuseModal(false); setMisuseSuccess(null); }, 3000);
+    } catch (err) {
+      setMisuseError(err instanceof Error ? err.message : 'Unable to submit report.');
+    } finally {
+      setReportingMisuse(false);
+    }
+  };
+
   const latestRenewal = renewalState?.renewals[0];
   const canRequestRenewal = Boolean(card && resident.approvalStatus === 'APPROVED' && !renewalState?.hasPendingRenewal);
   const canCreatePass = active && passes.length < 5;
@@ -567,7 +620,68 @@ function CardPage({ resident, token }: { resident: ResidentProfile; token: strin
         <button className="outline-button" type="button" onClick={downloadCard} disabled={downloading || !card}>
           {downloading ? <LoadingSpinner /> : <><Download size={17} /> Download card</>}
         </button>
+        {card && card.status !== 'SUSPENDED' && (
+          <button
+            className="outline-button"
+            type="button"
+            style={{ borderColor: '#dc2626', color: '#dc2626' }}
+            onClick={handleDeactivate}
+            disabled={deactivating}
+            title="Immediately block gate access and merchant benefits"
+          >
+            {deactivating ? <LoadingSpinner /> : <><ShieldOff size={17} /> Deactivate card</>}
+          </button>
+        )}
+        {card && (
+          <button
+            className="outline-button"
+            type="button"
+            style={{ borderColor: '#92400e', color: '#92400e' }}
+            onClick={() => { setShowMisuseModal(true); setMisuseError(null); setMisuseSuccess(null); }}
+            title="Report your card being used without your permission"
+          >
+            <Flag size={17} /> Report misuse
+          </button>
+        )}
       </div>
+      {deactivateError && <div className="auth-error" role="alert" style={{ marginTop: 10 }}>{deactivateError}</div>}
+
+      {/* ── Report misuse modal ─────────────────────────────────────── */}
+      {showMisuseModal && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="misuse-title">
+          <div className="modal-card">
+            <div className="modal-icon" style={{ background: '#fef3c7', color: '#92400e' }}><Flag size={22} /></div>
+            <h3 id="misuse-title">Report card misuse</h3>
+            <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 14px' }}>
+              Describe what happened — e.g. your card was used without your knowledge, or you noticed unauthorised scans. BERA will investigate.
+            </p>
+            <form onSubmit={handleReportMisuse} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {misuseError && <div className="auth-error" role="alert">{misuseError}</div>}
+              {misuseSuccess && <div className="profile-success" role="status">{misuseSuccess}</div>}
+              <label>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#2a4454', display: 'block', marginBottom: 5 }}>
+                  Description <span style={{ color: '#dc2626' }}>*</span>
+                </span>
+                <textarea
+                  required
+                  rows={4}
+                  maxLength={500}
+                  value={misuseDesc}
+                  onChange={e => setMisuseDesc(e.target.value)}
+                  placeholder="e.g. My card was scanned at a merchant I did not visit on 2 Aug 2026..."
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid #cad4da', borderRadius: 8, font: 'inherit', fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }}
+                />
+              </label>
+              <div className="modal-actions">
+                <button type="button" className="secondary-button" onClick={() => setShowMisuseModal(false)}>Cancel</button>
+                <button type="submit" className="primary-button" disabled={reportingMisuse || !misuseDesc.trim()}>
+                  {reportingMisuse ? <LoadingSpinner /> : 'Submit report'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       <div className="status-panel">
         <div><span className={`status-dot ${active ? '' : 'pending'}`} /><div><strong>Membership {humanStatus(card?.status || resident.approvalStatus)}</strong><small>{active ? `Verified by BERA on ${formatDate(card?.issuedAt)}` : 'BERA will review the submitted resident details'}</small></div></div>
         <div><span>Issue date</span><strong>{formatDate(card?.issuedAt)}</strong></div>
@@ -1326,7 +1440,7 @@ function ResidentPortal({ session, logout }: { session: AuthSession; logout: () 
         )}
         {activeView === 'home' && <Overview setView={setView} resident={resident} dashboard={dashboard} />}
         {activeView === 'directory' && <Directory token={session.accessToken} />}
-        {activeView === 'card' && <CardPage resident={resident} token={session.accessToken} />}
+        {activeView === 'card' && <CardPage resident={resident} token={session.accessToken} onCardDeactivated={loadDashboard} />}
         {activeView === 'activity' && <ActivityPage activity={dashboard?.recentActivity ?? []} rewardBalances={dashboard?.rewardBalances ?? []} />}
         {activeView === 'dependants' && <DependantsPage token={session.accessToken} />}
         {activeView === 'support' && <SupportPage token={session.accessToken} />}

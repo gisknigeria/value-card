@@ -96,6 +96,27 @@ export class AuthController {
     return this.auth.adminMe(request.user.userId);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Patch('resident/card/deactivate')
+  deactivateMyCard(@Req() request: AuthenticatedRequest) {
+    return this.auth.deactivateMyCard(request.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('access-card/deactivate')
+  deactivateAccessCard(@Req() request: AuthenticatedRequest) {
+    return this.auth.deactivateAccessCard(request.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('access-card/report-misuse')
+  reportCardMisuse(
+    @Req() request: AuthenticatedRequest,
+    @Body('description') description: string,
+  ) {
+    return this.auth.reportCardMisuse(request.user.userId, description || '');
+  }
+
   // ── Visitor passes ─────────────────────────────────────────────────────────
 
   @UseGuards(JwtAuthGuard)

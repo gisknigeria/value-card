@@ -97,6 +97,27 @@ export class VerificationService {
       },
     });
 
+    // Notify the resident that their card was scanned
+    if (!ctx.idempotencyKey && card.scanCardId) {
+      const cardRecord = await this.prisma.card.findUnique({
+        where: { id: card.scanCardId },
+        select: { resident: { select: { userId: true } } },
+      });
+      if (cardRecord?.resident) {
+        const location = ctx.merchantId ? 'a merchant' : 'a BERA verification point';
+        await this.prisma.notification.create({
+          data: {
+            userId: cardRecord.resident.userId,
+            type: 'CARD_SCANNED',
+            title: 'Card scanned',
+            body: allowed
+              ? `Your card (${card.membershipId}) was scanned at ${location}.`
+              : `An attempt to use your card (${card.membershipId}) at ${location} was denied — card is ${effectiveStatus.toLowerCase()}.`,
+          },
+        });
+      }
+    }
+
     return {
       membershipId:   card.membershipId,
       fullName:       card.fullName,

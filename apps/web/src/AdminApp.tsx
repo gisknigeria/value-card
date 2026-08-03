@@ -13,7 +13,9 @@ import {
   ChevronRight,
   ChevronUp,
   Clock3,
+  CreditCard,
   Download,
+  Flag,
   LogOut,
   MapPin,
   MessageSquare,
@@ -21,6 +23,7 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  ShieldOff,
   Store,
   UserCheck,
   UserPlus,
@@ -40,6 +43,9 @@ import {
   processRenewal,
   listMerchantsForWalkIn,
   logWalkIn,
+  getAdminMe,
+  deactivateAccessCard,
+  reportCardMisuse,
   type ApprovalStatus,
   type MerchantProfile,
   type AdminMerchantListResponse,
@@ -51,6 +57,7 @@ import {
   type UserRole,
   type MerchantListItem,
   type WalkInLog,
+  type AdminIdentityFull,
 } from './api';
 import { PagerBar, ResidentDetailModal, ComplaintsPanel, TransactionAuditPanel, AdminReportsPanel } from './AdminPanels';
 
@@ -1403,6 +1410,224 @@ function StickerExportsPanel({ token }: { token: string }) {
 
 type AdminSection = 'residents' | 'dependants' | 'positions' | 'renewals' | 'merchants' | 'offers' | 'complaints' | 'transactions' | 'reports' | 'walkins' | 'cards' | 'stickers';
 
+// ── Admin personal card ───────────────────────────────────────────────
+
+function AdminMyCard({ token }: { token: string }) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [adminFull, setAdminFull] = useState<AdminIdentityFull | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
+  const [deactivateError, setDeactivateError] = useState('');
+  const [deactivateSuccess, setDeactivateSuccess] = useState('');
+  const [showMisuseModal, setShowMisuseModal] = useState(false);
+  const [misuseDesc, setMisuseDesc] = useState('');
+  const [reportingMisuse, setReportingMisuse] = useState(false);
+  const [misuseError, setMisuseError] = useState('');
+  const [misuseSuccess, setMisuseSuccess] = useState('');
+  const [notifications, setNotifications] = useState<{ id: string; title: string; body: string; isRead: boolean; createdAt: string }[]>([]);
+
+  const loadData = useCallback(async () => {
+    try {
+      const [{ admin }, notifRes] = await Promise.all([
+        getAdminMe(token),
+        apiRequest<{ notifications: { id: string; title: string; body: string; isRead: boolean; createdAt: string }[]; unreadCount: number }>(
+          '/api/auth/resident/notifications',
+          { headers: { Authorization: `Bearer ${token}` } },
+        ).catch(() => ({ notifications: [], unreadCount: 0 })),
+      ]);
+      setAdminFull(admin);
+      setNotifications(notifRes.notifications.filter(n =>
+        n.title.toLowerCase().includes('card') ||
+        n.title.toLowerCase().includes('scan') ||
+        n.title.toLowerCase().includes('misuse'),
+      ).slice(0, 5));
+    } catch { /* non-critical */ }
+    finally { setLoading(false); }
+  }, [token]);
+
+  useEffect(() => { void loadData(); }, [loadData]);
+
+  const card = adminFull?.accessCard ?? null;
+  const cardActive = card?.status === 'ACTIVE';
+
+  const downloadCard = async () => {
+    if (!cardRef.current || !card) return;
+    setDownloading(true);
+    try {
+      const { default: html2canvas } = await import('html2canvas');
+      const canvas = await html2canvas(cardRef.current, { scale: 3, backgroundColor: '#291839', useCORS: true });
+      const link = document.createElement('a');
+      link.download = `bodija-admin-card-${card.cardNumber}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } finally { setDownloading(false); }
+  };
+
+  const handleDeactivate = async () => {
+    if (!window.confirm('Deactivate your admin access card? This will immediately block your gate access. Contact the system administrator to reactivate it.')) return;
+    setDeactivating(true); setDeactivateError(''); setDeactivateSuccess('');
+    try {
+      await deactivateAccessCard(token);
+      setDeactivateSuccess('Your card has been deactivated. The status below will update shortly.');
+      await loadData();
+    } catch (e) {
+      setDeactivateError(e instanceof Error ? e.message : 'Unable to deactivate card.');
+    } finally { setDeactivating(false); }
+  };
+
+  const handleReportMisuse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!misuseDesc.trim()) return;
+    setReportingMisuse(true); setMisuseError(''); setMisuseSuccess('');
+    try {
+      await reportCardMisuse(token, misuseDesc.trim());
+      setMisuseSuccess('Your report has been submitted. BERA will investigate.');
+      setMisuseDesc('');
+      setTimeout(() => { setShowMisuseModal(false); setMisuseSuccess(''); }, 3000);
+    } catch (e) {
+      setMisuseError(e instanceof Error ? e.message : 'Unable to submit report.');
+    } finally { setReportingMisuse(false); }
+  };
+
+  if (loading) {
+    return (
+      <div className="admin-workspace" style={{ marginTop: 24, padding: 32, display: 'flex', alignItems: 'center', gap: 12, color: 'var(--muted)' }}>
+        <RefreshCw size={18} /> Loading card…
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="admin-workspace" style={{ marginTop: 24, padding: 28, maxWidth: 560 }}>
+        {/* Card visual */}
+        <div ref={cardRef} style={{ display: 'flex', justifyContent: 'space-between', gap: 20, alignItems: 'center', flexWrap: 'wrap', padding: 4 }}>
+          <div>
+            <small style={{ color: 'var(--muted)', fontWeight: 800, fontSize: 11 }}>BERA · BODIJA VALUE CARD</small>
+            <h2 style={{ margin: '8px 0 4px', fontSize: 22 }}>{adminFull?.email ?? 'Administrator'}</h2>
+            <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>
+              {adminFull?.adminRole
+                ? adminFull.adminRole.replace(/_/g, ' ').toLowerCase().replace(/^\w/, c => c.toUpperCase())
+                : 'BERA Administrator'}
+              {adminFull?.associationName ? ` · ${adminFull.associationName}` : ''}
+            </p>
+            <strong style={{ display: 'block', marginTop: 18, fontFamily: 'monospace', letterSpacing: 1 }}>
+              {card?.cardNumber ?? 'No card issued'}
+            </strong>
+            <span
+              className={`dependant-status-badge ${cardActive ? 'status-approved' : 'status-pending'}`}
+              style={{ marginTop: 8, display: 'inline-flex' }}
+            >
+              {card?.status?.toLowerCase().replace(/_/g, ' ') ?? 'no card'}
+            </span>
+          </div>
+          <div style={{ minWidth: 148, minHeight: 148, background: '#fff', borderRadius: 12, padding: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {card
+              ? <QRCode value={card.qrToken} size={128} bgColor="#ffffff" fgColor="#291839" />
+              : <CreditCard size={64} style={{ color: '#ccc' }} />
+            }
+          </div>
+        </div>
+
+        <p style={{ margin: '18px 0 14px', color: 'var(--muted)', fontSize: 12 }}>
+          {card
+            ? 'Present this QR code at any BERA gate or approved merchant for identification and access.'
+            : 'No access card has been issued to this administrator account yet.'}
+        </p>
+
+        {/* Card meta */}
+        {card && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px', fontSize: 12, color: 'var(--muted)', marginBottom: 16 }}>
+            <div><span>Issued</span><strong style={{ display: 'block', color: 'var(--text)' }}>{card.issuedAt ? new Date(card.issuedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</strong></div>
+            <div><span>Expires</span><strong style={{ display: 'block', color: 'var(--text)' }}>{card.expiresAt ? new Date(card.expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No expiry'}</strong></div>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <button className="outline-button" onClick={() => void downloadCard()} disabled={!card || downloading}>
+            <Download size={16} /> {downloading ? 'Saving…' : 'Download card'}
+          </button>
+          {card && card.status !== 'SUSPENDED' && (
+            <button
+              className="outline-button"
+              style={{ borderColor: '#dc2626', color: '#dc2626' }}
+              onClick={() => void handleDeactivate()}
+              disabled={deactivating}
+              title="Immediately block gate access"
+            >
+              <ShieldOff size={16} /> {deactivating ? 'Deactivating…' : 'Deactivate card'}
+            </button>
+          )}
+          {card && (
+            <button
+              className="outline-button"
+              style={{ borderColor: '#92400e', color: '#92400e' }}
+              onClick={() => { setShowMisuseModal(true); setMisuseError(''); setMisuseSuccess(''); }}
+            >
+              <Flag size={16} /> Report misuse
+            </button>
+          )}
+        </div>
+
+        {deactivateError && <div className="auth-error" style={{ marginTop: 12 }}>{deactivateError}</div>}
+        {deactivateSuccess && <div className="profile-success" style={{ marginTop: 12 }}>{deactivateSuccess}</div>}
+      </div>
+
+      {/* Card activity notifications */}
+      {notifications.length > 0 && (
+        <div className="admin-workspace" style={{ marginTop: 16, padding: 20, maxWidth: 560 }}>
+          <h3 style={{ fontSize: 14, marginBottom: 12 }}>Recent card activity</h3>
+          {notifications.map(n => (
+            <div key={n.id} className="dependant-card" style={{ marginBottom: 8, opacity: n.isRead ? 0.7 : 1 }}>
+              <div className="dependant-info">
+                <strong style={{ fontSize: 13 }}>{n.title}</strong>
+                <span style={{ fontSize: 12 }}>{n.body}</span>
+                <small style={{ color: 'var(--muted)' }}>{new Date(n.createdAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Report misuse modal */}
+      {showMisuseModal && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal-card">
+            <div className="modal-icon" style={{ background: '#fef3c7', color: '#92400e' }}><Flag size={22} /></div>
+            <h3>Report card misuse</h3>
+            <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 14px' }}>
+              Describe what happened — e.g. your card was scanned somewhere you didn't authorise. BERA will investigate.
+            </p>
+            <form onSubmit={(e) => void handleReportMisuse(e)} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {misuseError && <div className="auth-error" role="alert">{misuseError}</div>}
+              {misuseSuccess && <div className="profile-success" role="status">{misuseSuccess}</div>}
+              <label>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#2a4454', display: 'block', marginBottom: 5 }}>
+                  Description <span style={{ color: '#dc2626' }}>*</span>
+                </span>
+                <textarea
+                  required rows={4} maxLength={500} value={misuseDesc}
+                  onChange={e => setMisuseDesc(e.target.value)}
+                  placeholder="e.g. My card was scanned at a gate I did not pass through on 2 Aug 2026…"
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid #cad4da', borderRadius: 8, font: 'inherit', fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }}
+                />
+              </label>
+              <div className="modal-actions">
+                <button type="button" className="secondary-button" onClick={() => setShowMisuseModal(false)}>Cancel</button>
+                <button type="submit" className="primary-button" disabled={reportingMisuse || !misuseDesc.trim()}>
+                  {reportingMisuse ? 'Submitting…' : 'Submit report'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function AdminDashboard({ token, admin, logout }: { token: string; admin: AdminIdentity; logout: () => void }) {
   const [section, setSection] = useState<AdminSection>('residents');
   const [data, setData] = useState<ResidentsResponse>({ residents: [], counts: { pending: 0, approved: 0, rejected: 0, suspended: 0 } });
@@ -1437,6 +1662,7 @@ function AdminDashboard({ token, admin, logout }: { token: string; admin: AdminI
     { id: 'walkins', label: 'Walk-ins', icon: Bell },
     { id: 'stickers', label: 'Stickers', icon: Download },
     { id: 'cards', label: 'Cards', icon: Download },
+    { id: 'mycard', label: 'My card', icon: CreditCard },
   ] as const;
 
   return (
@@ -1489,6 +1715,7 @@ function AdminDashboard({ token, admin, logout }: { token: string; admin: AdminI
         {section === 'walkins'      && <AdminWalkInPanel token={token} />}
         {section === 'stickers'     && <StickerExportsPanel token={token} />}
         {section === 'cards'        && <CardExportsPanel token={token} />}
+        {section === 'mycard'       && <AdminMyCard token={token} />}
       </main>
     </div>
   );

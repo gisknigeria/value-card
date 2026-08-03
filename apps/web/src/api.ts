@@ -261,6 +261,27 @@ export function loginResident(identifier: string, password: string) {
   });
 }
 
+export interface AdminIdentityFull {
+  id: string;
+  email: string | null;
+  role: 'ADMIN';
+  adminRole: AdminRole | null;
+  associationName: string | null;
+  accessCard: {
+    cardNumber: string;
+    qrToken: string;
+    status: CardStatus;
+    issuedAt: string;
+    expiresAt: string | null;
+  } | null;
+}
+
+export function getAdminMe(token: string) {
+  return apiRequest<{ admin: AdminIdentityFull }>('/api/auth/admin/me', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export function loginAdmin(identifier: string, password: string) {
   return apiRequest<{
     accessToken: string;
@@ -386,6 +407,32 @@ export function markAllNotificationsRead(token: string) {
   return apiRequest<{ success: boolean }>('/api/auth/resident/notifications/read-all', {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+// ── Card self-management ──────────────────────────────────────────────
+
+export function deactivateMyCard(token: string) {
+  return apiRequest<{ success: boolean }>('/api/auth/resident/card/deactivate', {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+/** Deactivates the AccessCard (gate/merchant/admin role card) for any user role */
+export function deactivateAccessCard(token: string) {
+  return apiRequest<{ success: boolean }>('/api/auth/access-card/deactivate', {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+/** Submit a card misuse report directly as a notification (for non-resident users) */
+export function reportCardMisuse(token: string, description: string) {
+  return apiRequest<{ success: boolean }>('/api/auth/access-card/report-misuse', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ description }),
   });
 }
 

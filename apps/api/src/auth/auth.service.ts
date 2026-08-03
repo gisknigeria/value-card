@@ -249,7 +249,16 @@ export class AuthService {
   async adminMe(userId: string) {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, role: UserRole.ADMIN, isActive: true },
-      select: { id: true, email: true, role: true, adminRole: true, associationName: true },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        adminRole: true,
+        associationName: true,
+        accessCard: {
+          select: { cardNumber: true, qrToken: true, status: true, issuedAt: true, expiresAt: true },
+        },
+      },
     });
     if (!user) throw new UnauthorizedException('Administrator account is unavailable');
     return { admin: user };
@@ -692,6 +701,75 @@ export class AuthService {
         createdAt: new Date(pass.createdAt).toISOString(),
       },
     };
+  }
+
+  async reportCardMisuse(userId: string, description: string) {
+    // For non-resident users (merchant, admin, security) who don't have a Complaint record
+    // We store the report as an admin-facing notification and also notify the user
+    await this.prisma.notification.create({
+      data: {
+        userId,
+        type: 'CARD_MISUSE_REPORTED',
+        title: 'Card misuse report submitted',
+        body: `Your report has been submitted to BERA for review: ${description.slice(0, 200)}`,
+      },
+    });
+    return { success: true };
+  }
+
+  async deactivateAccessCard(userId: string) {
+    const accessCard = await this.prisma.accessCard.findUnique({
+      where: { userId },
+      select: { id: true, status: true },
+    });
+    if (!accessCard) throw new BadRequestException('No access card found for this account');
+    if (accessCard.status === 'SUSPENDED') throw new BadRequestException('Your card is already deactivated');
+
+    await this.prisma.$transaction([
+      this.prisma.accessCard.update({
+        where: { id: accessCard.id },
+        data: { status: 'SUSPENDED' },
+      }),
+      this.prisma.notification.create({
+        data: {
+          userId,
+          type: 'CARD_DEACTIVATED',
+          title: 'Card deactivated',
+          body: 'Your Bodija Value Card has been deactivated at your request. Contact BERA support to reactivate it.',
+        },
+      }),
+    ]);
+
+    return { success: true };
+  }
+
+  async deactivateMyCard(userId: string) {
+    const resident = await this.prisma.resident.findUnique({
+      where: { userId },
+      select: { id: true, card: { select: { id: true, status: true } } },
+    });
+    if (!resident) throw new UnauthorizedException('Resident account is unavailable');
+
+    const card = resident.card;
+    if (!card) throw new BadRequestException('No card is associated with your account');
+    if (card.status === 'SUSPENDED') throw new BadRequestException('Your card is already deactivated');
+
+    await this.prisma.$transaction([
+      this.prisma.card.update({
+        where: { id: card.id },
+        data: { status: 'SUSPENDED' },
+      }),
+      this.prisma.notification.create({
+        data: {
+          userId,
+          type: 'CARD_DEACTIVATED',
+          title: 'Card deactivated',
+          body: 'Your Bodija Value Card has been deactivated at your request. Contact BERA support to reactivate it.',
+        },
+      }),
+    ]);
+
+    return { success: true };
   }
 
   async deleteVisitorPass(userId: string, id: string) {

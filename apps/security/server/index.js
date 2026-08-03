@@ -753,7 +753,7 @@ app.post('/api/access/verify', auth, accessPointOnLocation, asyncRoute(async (re
   const { rows } = await pool.query(
     `select c.id as "cardId", c."membershipId", c.status as "cardStatus",
       c."expiresAt", r.id as "residentId", r."fullName", r.neighbourhood,
-      r."memberCategory"
+      r."memberCategory", null as "accessUserId"
      from "Card" c
      join "Resident" r on r.id = c."residentId"
      where c."qrToken" = $1 or c."membershipId" = $1
@@ -761,7 +761,25 @@ app.post('/api/access/verify', auth, accessPointOnLocation, asyncRoute(async (re
     [token],
   );
 
-  const card = rows[0];
+  // Fallback: check AccessCard (merchant / admin / security role cards)
+  let accessCardRow = null;
+  if (!rows[0]) {
+    const { rows: acRows } = await pool.query(
+      `select ac.id as "cardId", ac."cardNumber" as "membershipId", ac.status as "cardStatus",
+        ac."expiresAt", u.id as "accessUserId",
+        coalesce(u."displayName", u.phone) as "fullName",
+        'Access card holder' as neighbourhood,
+        u.role as "memberCategory"
+       from "AccessCard" ac
+       join "User" u on u.id = ac."userId"
+       where ac."qrToken" = $1 or ac."cardNumber" = $1
+       limit 1`,
+      [token],
+    );
+    accessCardRow = acRows[0] || null;
+  }
+
+  const card = rows[0] || accessCardRow;
   const expiresAt  = card?.expiresAt ? new Date(card.expiresAt) : null;
   const validExpiry = expiresAt && expiresAt.getTime() >= Date.now();
   const naturallyAllowed = Boolean(card && card.cardStatus === 'ACTIVE' && validExpiry);
@@ -806,6 +824,46 @@ app.post('/api/access/verify', auth, accessPointOnLocation, asyncRoute(async (re
       idempotencyKey,
     ],
   );
+
+  // Notify the card holder that their card was scanned at a security gate
+  if (!idempotencyKey) {
+    try {
+      let notifyUserId = null;
+      const allowed = decision === 'ALLOWED' || decision === 'OVERRIDE_ALLOWED';
+
+      if (card?.residentId) {
+        // Resident card — look up via Resident table
+        const { rows: userRows } = await pool.query(
+          `select "userId" from "Resident" where id = $1 limit 1`,
+          [card.residentId],
+        );
+        notifyUserId = userRows[0]?.userId ?? null;
+      } else if (card?.accessUserId) {
+        // AccessCard holder (merchant / admin / security)
+        notifyUserId = card.accessUserId;
+      }
+
+      if (notifyUserId) {
+        const notifId = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        await pool.query(
+          `insert into "Notification" (id, "userId", type, title, body, "isRead", "createdAt")
+           values ($1, $2, $3, $4, $5, false, now())`,
+          [
+            notifId,
+            notifyUserId,
+            'CARD_SCANNED_GATE',
+            'Card scanned at security gate',
+            allowed
+              ? `Your card (${card.membershipId}) was scanned for ${direction.toLowerCase()} at ${gate}.`
+              : `An attempt to use your card (${card.membershipId}) at ${gate} was denied — ${reason.toLowerCase()}.`,
+          ],
+        );
+      }
+    } catch (notifError) {
+      // Non-critical — log but don't fail the scan
+      console.error('Failed to create scan notification:', notifError);
+    }
+  }
 
   // Broadcast live gate event to all authenticated sockets
   io.to('gate-events').emit('gate:event', {
