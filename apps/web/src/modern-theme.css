@@ -1264,3 +1264,97 @@ h1, h2, h3, p { margin: 0; }
 .role-card-admin .role-card-details p,
 .role-card-admin > p { color: #d8e2f3 !important; }
 .role-card-admin .role-card-qr { border-color: #e9bd58 !important; }
+
+/* International-format membership card system: restrained type, privacy-first names,
+   and consistent role colours in the portal and downloaded artwork. */
+.value-card,
+.admin-card-render,
+.role-card-shell {
+  font-family: 'DM Sans', Arial, sans-serif !important;
+}
+.value-card .card-programme-title strong,
+.admin-card-head strong {
+  font-family: 'Manrope', 'DM Sans', Arial, sans-serif !important;
+  font-weight: 800 !important;
+  letter-spacing: -.055em !important;
+}
+.value-card .member-details h2,
+.admin-card-member h3 {
+  font-family: 'DM Sans', Arial, sans-serif !important;
+  font-size: clamp(10px, 1.15vw, 12px) !important;
+  font-weight: 650 !important;
+  line-height: 1.25 !important;
+  letter-spacing: .08em !important;
+  text-transform: uppercase !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.value-card {
+  border-radius: 24px !important;
+  border-width: 1px !important;
+  box-shadow: 0 24px 54px rgba(18, 29, 52, .24) !important;
+}
+.value-card::before,
+.admin-card-render::before { opacity: .72; }
+.value-card::after,
+.admin-card-render::after { opacity: .58; }
+.value-card .qr,
+.admin-card-qr {
+  border-color: var(--card-accent, #aeb9d4) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, .12), 0 10px 24px rgba(4, 12, 28, .18) !important;
+}
+.value-card .member-details small,
+.value-card .card-bottom small,
+.admin-card-member small,
+.admin-card-foot small,
+.admin-card-head span,
+.admin-card-head small { color: var(--card-soft, #dce5f4) !important; }
+.value-card .card-bottom,
+.admin-card-foot { border-color: var(--card-rule, rgba(255,255,255,.28)) !important; }
+
+.value-card.card-theme-resident,
+.admin-card-render.card-theme-resident {
+  --card-accent: #aeb9e5;
+  --card-soft: #dce2ff;
+  --card-rule: rgba(190, 201, 244, .42);
+  background: linear-gradient(145deg, #202a52 0%, #303d75 60%, #465798 100%) !important;
+  border-color: #8998d1 !important;
+}
+.value-card.card-theme-homeowner,
+.admin-card-render.card-theme-homeowner {
+  --card-accent: #d6ae63;
+  --card-soft: #ecd9ad;
+  --card-rule: rgba(223, 188, 116, .44);
+  background: linear-gradient(145deg, #102d42 0%, #194b67 62%, #276f86 100%) !important;
+  border-color: #c49a4d !important;
+}
+.value-card.card-theme-tenant,
+.admin-card-render.card-theme-tenant {
+  --card-accent: #71d7da;
+  --card-soft: #c7f0ef;
+  --card-rule: rgba(118, 218, 217, .42);
+  background: linear-gradient(145deg, #064650 0%, #08707b 62%, #15949a 100%) !important;
+  border-color: #62c8cb !important;
+}
+.value-card.card-theme-household,
+.admin-card-render.card-theme-household {
+  --card-accent: #c0a7ea;
+  --card-soft: #eadffc;
+  --card-rule: rgba(202, 179, 239, .42);
+  background: linear-gradient(145deg, #37265f 0%, #563b85 62%, #7654a3 100%) !important;
+  border-color: #ae92dc !important;
+}
+.value-card.card-theme-leadership,
+.admin-card-render.card-theme-leadership {
+  --card-accent: #e2ad78;
+  --card-soft: #f3d9bd;
+  --card-rule: rgba(231, 182, 132, .42);
+  background: linear-gradient(145deg, #4b1029 0%, #751d3d 60%, #98324f 100%) !important;
+  border-color: #d99b68 !important;
+}
+
+@media(max-width:620px) {
+  .value-card .member-details h2 { font-size: 10px !important; letter-spacing: .065em !important; }
+}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import EncryptedQRCode from './EncryptedQRCode';
+import { getMembershipCardTheme } from './cardTheme';
 import {
   AlertTriangle,
   BarChart2,
@@ -1303,11 +1304,12 @@ function CardExportsPanel({ token }: { token: string }) {
     setExporting(true); setMessage('');
     try {
       const { default: html2canvas } = await import('html2canvas');
+      await document.fonts?.ready;
       for (const id of ids) {
         const node = cardRefs.current[id];
         const resident = items.find((item) => item.id === id);
         if (!node || !resident) continue;
-        const canvas = await html2canvas(node, { scale: 3, backgroundColor: '#0f2440', useCORS: true });
+        const canvas = await html2canvas(node, { scale: 3, backgroundColor: null, useCORS: true, logging: false });
         const link = document.createElement('a');
         link.download = `bodija-value-card-${resident.card.membershipId}-${resident.fullName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`;
         link.href = canvas.toDataURL('image/png');
@@ -1326,17 +1328,19 @@ function CardExportsPanel({ token }: { token: string }) {
     <div className="sticker-toolbar"><label><input type="checkbox" checked={items.length > 0 && selected.length === items.length} onChange={selectAll} /> Select all ({selected.length})</label><button className="primary-button" disabled={exporting || !selected.length} onClick={() => void exportCards(selected)}><Download size={17} /> {exporting ? 'Preparing cards…' : 'Bulk download cards'}</button></div>
     {message && <div className={message.includes('successfully') ? 'profile-success' : 'auth-error'}>{message}</div>}
     {loading ? <div className="admin-empty"><div className="loading-spinner" /></div> : items.length === 0 ? <div className="admin-empty"><BadgeCheck size={26} /><strong>No active resident cards</strong><span>Cards will appear here after resident approval and activation.</span></div> : <div className="sticker-grid card-export-grid">
-      {items.map((resident) => <article className={`sticker-record card-export-record ${selected.includes(resident.id) ? 'selected' : ''}`} key={resident.id}>
+      {items.map((resident) => {
+        const theme = getMembershipCardTheme(resident.memberCategory);
+        return <article className={`sticker-record card-export-record ${selected.includes(resident.id) ? 'selected' : ''}`} key={resident.id}>
         <label className="sticker-select"><input type="checkbox" checked={selected.includes(resident.id)} onChange={() => toggle(resident.id)} /><span>{resident.fullName}</span></label>
         <small>{resident.neighbourhood} · {resident.card.membershipId}</small>
-        <div className="admin-card-render" ref={(node) => { cardRefs.current[resident.id] = node; }}>
+        <div className={`admin-card-render ${theme.className}`} data-card-role={theme.tone} ref={(node) => { cardRefs.current[resident.id] = node; }}>
           <div className="admin-card-head"><div><span>BERA</span><strong>Bodija<br />Value Card</strong><small>Value. Community. Growth.</small></div><em><i /> ACTIVE</em></div>
-          <div className="admin-card-qr"><EncryptedQRCode token={resident.card.qrToken} size={112} bgColor="#ffffff" fgColor="#1a3558" /></div>
+          <div className="admin-card-qr"><EncryptedQRCode token={resident.card.qrToken} size={112} bgColor="#ffffff" fgColor={theme.qrColor} /></div>
           <div className="admin-card-member"><small>{resident.memberCategory}</small><h3>{resident.fullName}</h3><span>{resident.card.membershipId.length <= 4 ? '****' : `${resident.card.membershipId.slice(0, -4)}****`}</span></div>
           <div className="admin-card-foot"><div><small>Cluster</small><strong>{resident.neighbourhood}</strong></div><div><small>Valid until</small><strong>{resident.card.expiresAt ? formatDate(resident.card.expiresAt) : 'No expiry'}</strong></div></div>
         </div>
         <div className="sticker-record-foot"><span>Active membership card</span><button className="text-button" onClick={() => void exportCards([resident.id])}>Download one</button></div>
-      </article>)}
+      </article>;})}
     </div>}
   </section>;
 }

@@ -41,6 +41,7 @@ import {
 } from 'lucide-react';
 import AuthScreen from './AuthScreen';
 import EncryptedQRCode from './EncryptedQRCode';
+import { getMembershipCardTheme } from './cardTheme';
 import {
   getResident,
   updateResidentProfile,
@@ -283,10 +284,11 @@ function ValueCard({ resident, compact = false, cardRef, showPin = false }: { re
     ? resident.card
     : null;
   const isActive = card?.status === 'ACTIVE';
+  const theme = getMembershipCardTheme(resident.memberCategory);
   return (
-    <div className={`value-card value-card-resident ${compact ? 'compact' : ''}`} ref={cardRef}>
+    <div className={`value-card value-card-resident ${theme.className} ${compact ? 'compact' : ''}`} data-card-role={theme.tone} ref={cardRef}>
       <div className="card-top"><div className="card-programme-title"><span>BERA</span><strong>Bodija<br />Value Card</strong><small>Value. Community. Growth.</small></div><span className={`card-active ${isActive ? '' : 'pending'}`}><i /> {card ? humanStatus(card.status) : 'Not issued'}</span></div>
-      {card && <div className="qr"><EncryptedQRCode token={card.qrToken} size={compact ? 68 : 126} bgColor="#ffffff" fgColor="#291839" /></div>}
+      {card && <div className="qr"><EncryptedQRCode token={card.qrToken} size={compact ? 68 : 126} bgColor="#ffffff" fgColor={theme.qrColor} /></div>}
       <div className="member-details"><small>{resident.memberCategory}</small><h2>{resident.fullName}</h2><span>{privateCardNumber(card?.membershipId, showPin)}</span></div>
       <div className="card-bottom"><div><small>Cluster</small><strong>{resident.neighbourhood}</strong></div><div><small>Valid until</small><strong>{formatDate(card?.expiresAt)}</strong></div></div>
     </div>
@@ -489,6 +491,7 @@ function CardPage({ resident, token, onCardDeactivated }: { resident: ResidentPr
     setDownloading(true);
     try {
       const { default: html2canvas } = await import('html2canvas');
+      await document.fonts?.ready;
       const canvas = await html2canvas(cardRef.current, {
         backgroundColor: null,
         scale: 3,
