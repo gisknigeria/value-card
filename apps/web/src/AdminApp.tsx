@@ -1408,7 +1408,7 @@ function StickerExportsPanel({ token }: { token: string }) {
   </section>;
 }
 
-type AdminSection = 'residents' | 'dependants' | 'positions' | 'renewals' | 'merchants' | 'offers' | 'complaints' | 'transactions' | 'reports' | 'walkins' | 'cards' | 'stickers';
+type AdminSection = 'residents' | 'dependants' | 'positions' | 'renewals' | 'merchants' | 'offers' | 'complaints' | 'transactions' | 'reports' | 'walkins' | 'cards' | 'stickers' | 'mycard';
 
 // ── Admin personal card ───────────────────────────────────────────────
 
