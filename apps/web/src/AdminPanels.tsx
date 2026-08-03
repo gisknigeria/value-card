@@ -62,7 +62,7 @@ export function ResidentDetailModal({ token, residentId, onClose }: { token: str
     <div className="modal-backdrop" role="dialog" aria-modal="true" style={{ alignItems: 'flex-start', paddingTop: 40 }}>
       <div className="modal-card" style={{ maxWidth: 700, width: '100%', maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <h3 style={{ margin: 0 }}>{loading ? 'Loading…' : resident?.fullName}</h3>
+          <h3 style={{ margin: 0 }}>{loading ? <div className="loading-spinner" style={{ width: 18, height: 18, borderWidth: 2 }} /> : resident?.fullName}</h3>
           <button className="secondary-button" style={{ minHeight: 30, fontSize: 12 }} onClick={onClose}>Close</button>
         </div>
         {resident && (
@@ -216,7 +216,7 @@ export function ComplaintsPanel({ token }: { token: string }) {
             </label>
             <div className="modal-actions">
               <button className="secondary-button" onClick={() => setEditing(null)}>Cancel</button>
-              <button className="primary-button" disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Update'}</button>
+              <button className="primary-button" disabled={saving} onClick={save}>{saving ? <div className="loading-spinner" /> : 'Update'}</button>
             </div>
           </div>
         </div>
@@ -239,7 +239,7 @@ export function ComplaintsPanel({ token }: { token: string }) {
         <span>Complaint</span><span>Resident</span><span>Status</span><span>Actions</span>
       </div>
       <div className="admin-list">
-        {loading && <div className="admin-empty"><span>Loading complaints…</span></div>}
+        {loading && <div className="admin-empty"><div className="loading-spinner" /></div>}
         {!loading && data.complaints.map(c => (
           <article key={c.id} className="admin-resident-row dep-row" style={{ gridTemplateColumns: 'minmax(220px,1.8fr) minmax(150px,1fr) minmax(120px,.6fr) minmax(100px,.5fr)' }}>
             <div className="admin-resident-identity">
@@ -342,7 +342,7 @@ export function TransactionAuditPanel({ token }: { token: string }) {
             </label>
             <div className="modal-actions">
               <button className="secondary-button" onClick={() => setEditing(null)}>Cancel</button>
-              <button className="primary-button" disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Update audit'}</button>
+              <button className="primary-button" disabled={saving} onClick={save}>{saving ? <div className="loading-spinner" /> : 'Update audit'}</button>
             </div>
           </div>
         </div>
@@ -363,7 +363,7 @@ export function TransactionAuditPanel({ token }: { token: string }) {
         <span>Transaction</span><span>Resident · Merchant</span><span>Audit status</span><span>Actions</span>
       </div>
       <div className="admin-list">
-        {loading && <div className="admin-empty"><span>Loading transactions…</span></div>}
+        {loading && <div className="admin-empty"><div className="loading-spinner" /></div>}
         {!loading && data.transactions.map(t => (
           <article key={t.id} className="admin-resident-row dep-row" style={{ gridTemplateColumns: 'minmax(200px,1.5fr) minmax(160px,1fr) minmax(120px,.7fr) minmax(100px,.5fr)' }}>
             <div className="admin-resident-identity">
@@ -413,7 +413,7 @@ export function AdminReportsPanel({ token }: { token: string }) {
 
   const fmtNgn = (v: string) => `NGN ${Number(v).toLocaleString('en-NG')}`;
 
-  if (loading) return <div className="admin-empty" style={{ minHeight: 200 }}><span>Loading reports…</span></div>;
+  if (loading) return <div className="admin-empty" style={{ minHeight: 200 }}><div className="loading-spinner" /></div>;
   if (error) return <div className="admin-alert" role="alert">{error}</div>;
   if (!report) return null;
 
@@ -561,7 +561,7 @@ export function GateEventsPanel({ token }: { token: string }) {
         <span>Resident</span><span>Gate · Direction</span><span>Decision</span><span>Time</span>
       </div>
       <div className="admin-list">
-        {loading && <div className="admin-empty"><span>Loading gate events…</span></div>}
+        {loading && <div className="admin-empty"><div className="loading-spinner" /></div>}
         {!loading && events.map(e => (
           <article key={e.id} className="admin-resident-row dep-row" style={{ gridTemplateColumns: 'minmax(160px,1.2fr) minmax(140px,1fr) minmax(100px,.6fr) minmax(100px,.5fr)' }}>
             <div className="dep-primary-col">

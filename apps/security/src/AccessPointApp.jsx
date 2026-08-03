@@ -18,6 +18,13 @@ const SCAN_COOLDOWN = 3000;
 const MAX_GPS_ACCURACY_METRES = 150;
 const GPS_STALE_MS = 45000;
 
+// ── QR payload decoder ────────────────────────────────────────────────────
+const QR_PREFIX = "https://bvc-id.ng/v/";
+function decodeQrPayload(raw) {
+  const s = String(raw || "").trim();
+  return s.startsWith(QR_PREFIX) ? s.slice(QR_PREFIX.length) : s;
+}
+
 // ── QR helpers (same as AccessScanner) ───────────────────────────────────
 async function decodeQR(source) {
   if ("BarcodeDetector" in window) {
@@ -312,7 +319,7 @@ function ScanTab({ gate, session, headers, isOnline, onVerified }) {
         const v = videoRef.current;
         if (!v || v.readyState < 2) return;
         const val = await decodeQR(v);
-        if (val) { stopCam(); setToken(val); verify(val); }
+        if (val) { stopCam(); setToken(decodeQrPayload(val)); verify(decodeQrPayload(val)); }
       }, 500);
     } catch (e) {
       setCamErr(e.name === "NotAllowedError" ? "Camera permission denied." : "Unable to start camera.");

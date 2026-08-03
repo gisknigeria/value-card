@@ -35,7 +35,7 @@ import {
   ShieldOff,
   Flag,
 } from 'lucide-react';
-import QRCode from 'react-qr-code';
+import EncryptedQRCode from './EncryptedQRCode';
 import {
   registerMerchant,
   loginMerchant,
@@ -259,7 +259,7 @@ function MerchantRegister({ onSwitch, onAuth }: {
             </label>
             {error && <div className="auth-error" role="alert">{error}</div>}
             <button className="auth-submit" disabled={loading}>
-              <span>{loading ? 'Submitting…' : 'Submit registration'}</span>
+              <span>{loading ? <div className="loading-spinner" /> : 'Submit registration'}</span>
             </button>
           </form>
           <p className="demo-login">Already registered? <button type="button" className="text-button" onClick={onSwitch}>Sign in</button></p>
@@ -321,7 +321,7 @@ function MerchantLogin({ onSwitch, onAuth }: {
             </div>
           </label>
           {error && <div className="auth-error" role="alert">{error}</div>}
-          <button className="auth-submit" disabled={loading}>{loading ? 'Signing in…' : 'Sign in to portal'}</button>
+          <button className="auth-submit" disabled={loading}>{loading ? <div className="loading-spinner" /> : 'Sign in to portal'}</button>
           <p style={{ marginTop: 16, fontSize: 11, textAlign: 'center', color: '#76858e' }}>
             New merchant? <button type="button" className="text-button" onClick={onSwitch}>Register your business</button>
           </p>
@@ -380,7 +380,7 @@ function ChangePasswordPanel({ token, onClose }: { token: string; onClose: () =>
           <div className="modal-actions">
             <button type="button" className="secondary-button" onClick={onClose}>Cancel</button>
             <button type="submit" className="primary-button" disabled={loading}>
-              {loading ? 'Saving…' : 'Change password'}
+              {loading ? <div className="loading-spinner" /> : 'Change password'}
             </button>
           </div>
         </form>
@@ -495,7 +495,7 @@ function StaffPanel({ token, isOwner }: { token: string; isOwner: boolean }) {
       )}
 
       {error && <div className="auth-error" role="alert">{error}</div>}
-      {loading && <div style={{ color: 'var(--muted)', fontSize: 12 }}>Loading staff…</div>}
+      {loading && <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}><div className="loading-spinner" /></div>}
       {!loading && staff.map(s => {
         const name = s.user.displayName || s.user.phone;
         const initials = s.user.displayName
@@ -898,7 +898,7 @@ function TransactionsPanel({ token }: { token: string }) {
         <button className="secondary-button" style={{ fontSize: 12, minHeight: 38 }} onClick={() => { setFrom(''); setTo(''); }}>Clear</button>
       </div>
       {error && <div className="auth-error" role="alert">{error}</div>}
-      {loading && <div style={{ color: 'var(--muted)', fontSize: 13 }}>Loading transactions…</div>}
+      {loading && <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}><div className="loading-spinner" /></div>}
       {!loading && transactions.length === 0 && (
         <div className="admin-workspace" style={{ padding: 24, textAlign: 'center' }}>
           <p style={{ color: 'var(--muted)', fontSize: 13 }}>No transactions in this period.</p>
@@ -967,7 +967,7 @@ function ReportsPanel({ token }: { token: string }) {
           <div className="auth-input" style={{ height: 38 }}><input type="date" value={to} onChange={e => setTo(e.target.value)} /></div>
         </label>
         <button className="primary-button" style={{ fontSize: 12, minHeight: 38 }} onClick={load} disabled={loading}>
-          <BarChart2 size={15} /> {loading ? 'Loading…' : 'Generate report'}
+          <BarChart2 size={15} /> {loading ? <div className="loading-spinner" /> : 'Generate report'}
         </button>
       </div>
       {error && <div className="auth-error" role="alert">{error}</div>}
@@ -1125,7 +1125,7 @@ function OfferFormModal({ initial, onSave, onClose, isEdit }: {
           )}
           <div className="modal-actions">
             <button type="button" className="secondary-button" onClick={onClose}>Cancel</button>
-            <button type="submit" className="primary-button" disabled={saving}>{saving ? 'Saving…' : isEdit ? 'Save changes' : 'Submit for approval'}</button>
+            <button type="submit" className="primary-button" disabled={saving}>{saving ? <div className="loading-spinner" /> : isEdit ? 'Save changes' : 'Submit for approval'}</button>
           </div>
         </form>
       </div>
@@ -1268,7 +1268,7 @@ function OffersPanel({ token, isApproved }: { token: string; isApproved: boolean
       {error && <div className="auth-error" role="alert">{error}</div>}
       {actionError && <div className="profile-success" role="status">{actionError}</div>}
 
-      {loading && <div style={{ color: 'var(--muted)', fontSize: 13 }}>Loading offers…</div>}
+      {loading && <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}><div className="loading-spinner" /></div>}
       {!loading && offers.length === 0 && (
         <div className="admin-workspace" style={{ padding: '24px', textAlign: 'center' }}>
           <p style={{ color: 'var(--muted)', fontSize: 13 }}>No offers yet. Create your first resident benefit offer.</p>
@@ -1522,7 +1522,7 @@ function RoleAccessCard({ mu, token, lead = false }: { mu: MerchantUserProfile; 
     setDownloading(true);
     try {
       const { default: html2canvas } = await import('html2canvas');
-      const canvas = await html2canvas(cardRef.current, { scale: 3, backgroundColor: '#512b6c', useCORS: true });
+      const canvas = await html2canvas(cardRef.current, { scale: 3, backgroundColor: '#073f37', useCORS: true });
       const link = document.createElement('a');
       link.download = `bodija-access-card-${rawCard.cardNumber}.png`;
       link.href = canvas.toDataURL('image/png');
@@ -1572,7 +1572,7 @@ function RoleAccessCard({ mu, token, lead = false }: { mu: MerchantUserProfile; 
             </span>
           </div>
           <div className="role-card-qr" style={{ minWidth: 156, minHeight: 156 }}>
-            {rawCard ? <QRCode value={rawCard.qrToken} size={128} bgColor="#ffffff" fgColor="#073f37" /> : <QrCode size={64} />}
+            {rawCard ? <EncryptedQRCode token={rawCard.qrToken} size={128} bgColor="#ffffff" fgColor="#073f37" /> : <QrCode size={64} />}
           </div>
         </div>
         <p style={{ margin: '20px 0 12px', color: 'var(--muted)', fontSize: 12 }}>
@@ -1582,7 +1582,7 @@ function RoleAccessCard({ mu, token, lead = false }: { mu: MerchantUserProfile; 
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           <button className="outline-button" type="button" onClick={() => void downloadCard()} disabled={!rawCard || downloading}>
-            <Download size={16} /> {downloading ? 'Saving…' : 'Download card'}
+            <Download size={16} /> {downloading ? <div className="loading-spinner" /> : 'Download card'}
           </button>
           {rawCard && rawCard.status !== 'SUSPENDED' && (
             <button
@@ -1634,7 +1634,7 @@ function RoleAccessCard({ mu, token, lead = false }: { mu: MerchantUserProfile; 
               <div className="modal-actions">
                 <button type="button" className="secondary-button" onClick={() => setShowMisuseModal(false)}>Cancel</button>
                 <button type="submit" className="primary-button" disabled={reportingMisuse || !misuseDesc.trim()}>
-                  {reportingMisuse ? 'Submitting…' : 'Submit report'}
+                  {reportingMisuse ? <div className="loading-spinner" /> : 'Submit report'}
                 </button>
               </div>
             </form>
@@ -1919,7 +1919,7 @@ function WalkInsPanel({ token, merchantId }: { token: string; merchantId: string
       </div>
 
       {error && <div className="auth-error" role="alert" style={{ marginBottom: 12 }}>{error}</div>}
-      {loading && <p style={{ color: 'var(--muted)', fontSize: 13 }}>Loading…</p>}
+      {loading && <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}><div className="loading-spinner" /></div>}
 
       {/* Pending acknowledgement */}
       {pending.length > 0 && (

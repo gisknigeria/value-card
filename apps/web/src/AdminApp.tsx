@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import QRCode from 'react-qr-code';
+import EncryptedQRCode from './EncryptedQRCode';
 import {
   AlertTriangle,
   BarChart2,
@@ -337,7 +337,7 @@ function ResidentsPanel({ token }: { token: string }) {
         <span>Resident</span><span>Membership</span><span>Application</span><span>Actions</span>
       </div>
       <div className="admin-list">
-        {loading && <div className="admin-empty"><span>Loading applications…</span></div>}
+        {loading && <div className="admin-empty"><div className="loading-spinner" /></div>}
         {!loading && data.residents.map(r => (
           <ResidentDetailRow key={r.id} resident={r} updatingId={updatingId} onAction={requestAction}
             onDetail={() => setDetailId(r.id)} />
@@ -423,7 +423,7 @@ function DependantsPanel({ token }: { token: string }) {
         <span>Dependant</span><span>Primary resident</span><span>Status</span><span>Actions</span>
       </div>
       <div className="admin-list">
-        {loading && <div className="admin-empty"><span>Loading dependants…</span></div>}
+        {loading && <div className="admin-empty"><div className="loading-spinner" /></div>}
         {!loading && data.dependants.map(dep => (
           <article key={dep.id} className="admin-resident-row dep-row">
             <div className="admin-resident-identity">
@@ -542,7 +542,7 @@ function RenewalsPanel({ token }: { token: string }) {
         <span>Resident</span><span>Membership</span><span>Status</span><span>Actions</span>
       </div>
       <div className="admin-list">
-        {loading && <div className="admin-empty"><span>Loading renewals…</span></div>}
+        {loading && <div className="admin-empty"><div className="loading-spinner" /></div>}
         {!loading && data.renewals.map(item => (
           <article key={item.id} className="admin-resident-row dep-row">
             <div className="admin-resident-identity">
@@ -645,7 +645,7 @@ function PositionsPanel({ token, admin }: { token: string; admin: AdminIdentity 
         <span>User</span><span>Portal role</span><span>Admin position</span><span>Association</span>
       </div>
       <div className="admin-list">
-        {loading && <div className="admin-empty"><span>Loading users...</span></div>}
+        {loading && <div className="admin-empty"><div className="loading-spinner" /></div>}
         {!loading && users.map(user => (
           <article key={user.id} className="admin-resident-row dep-row" style={{ gridTemplateColumns: 'minmax(220px,1.4fr) minmax(120px,.7fr) minmax(170px,.9fr) minmax(170px,.9fr)' }}>
             <div className="admin-resident-identity">
@@ -771,7 +771,7 @@ function MerchantsPanel({ token }: { token: string }) {
         <span>Business</span><span>Category</span><span>Status</span><span>Actions</span>
       </div>
       <div className="admin-list">
-        {loading && <div className="admin-empty"><span>Loading merchants…</span></div>}
+        {loading && <div className="admin-empty"><div className="loading-spinner" /></div>}
         {!loading && data.merchants.map(m => (
           <article key={m.id} className="admin-resident-row dep-row" style={{ gridTemplateColumns: 'minmax(220px,1.6fr) minmax(140px,.8fr) minmax(140px,.8fr) minmax(130px,.6fr)' }}>
             <div className="admin-resident-identity">
@@ -910,7 +910,7 @@ function AdminOffersPanel({ token }: { token: string }) {
       </div>
 
       <div className="admin-list">
-        {loading && <div className="admin-empty"><span>Loading offers…</span></div>}
+        {loading && <div className="admin-empty"><div className="loading-spinner" /></div>}
         {!loading && data.offers.map(offer => (
           <article key={offer.id} className="admin-resident-row dep-row"
             style={{ gridTemplateColumns: 'minmax(200px,1.6fr) minmax(150px,1fr) minmax(120px,.65fr) minmax(130px,.6fr)' }}>
@@ -1008,7 +1008,7 @@ function AdminLogin({ onLogin }: { onLogin: (token: string, admin: AdminIdentity
           <label><span>Email address</span><input type="email" required value={email} onChange={e => setEmail(e.target.value)} autoComplete="username" /></label>
           <label><span>Password</span><input type="password" required minLength={8} value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" placeholder="Enter your password" /></label>
           {error && <div className="auth-error" role="alert">{error}</div>}
-          <button disabled={loading}>{loading ? 'Signing in...' : 'Sign in to admin'}</button>
+          <button disabled={loading}>{loading ? <div className="loading-spinner" /> : 'Sign in to admin'}</button>
           <a href="/">Return to resident portal</a>
         </form>
       </section>
@@ -1211,7 +1211,7 @@ function AdminWalkInPanel({ token }: { token: string }) {
             </button>
           </div>
 
-          {loadingRecent && <p style={{ color: 'var(--muted)', fontSize: 13, padding: '12px 16px' }}>Loading…</p>}
+          {loadingRecent && <div style={{ display: 'flex', justifyContent: 'center', padding: 12 }}><div className="loading-spinner" /></div>}
 
           {!loadingRecent && recentWalkIns.length === 0 && (
             <div style={{ padding: '24px 16px', textAlign: 'center' }}>
@@ -1307,7 +1307,7 @@ function CardExportsPanel({ token }: { token: string }) {
         const node = cardRefs.current[id];
         const resident = items.find((item) => item.id === id);
         if (!node || !resident) continue;
-        const canvas = await html2canvas(node, { scale: 3, backgroundColor: '#512b6c', useCORS: true });
+        const canvas = await html2canvas(node, { scale: 3, backgroundColor: '#0f2440', useCORS: true });
         const link = document.createElement('a');
         link.download = `bodija-value-card-${resident.card.membershipId}-${resident.fullName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`;
         link.href = canvas.toDataURL('image/png');
@@ -1325,13 +1325,13 @@ function CardExportsPanel({ token }: { token: string }) {
     </div>
     <div className="sticker-toolbar"><label><input type="checkbox" checked={items.length > 0 && selected.length === items.length} onChange={selectAll} /> Select all ({selected.length})</label><button className="primary-button" disabled={exporting || !selected.length} onClick={() => void exportCards(selected)}><Download size={17} /> {exporting ? 'Preparing cards…' : 'Bulk download cards'}</button></div>
     {message && <div className={message.includes('successfully') ? 'profile-success' : 'auth-error'}>{message}</div>}
-    {loading ? <div className="admin-empty"><RefreshCw size={22} /><strong>Loading active cards…</strong></div> : items.length === 0 ? <div className="admin-empty"><BadgeCheck size={26} /><strong>No active resident cards</strong><span>Cards will appear here after resident approval and activation.</span></div> : <div className="sticker-grid card-export-grid">
+    {loading ? <div className="admin-empty"><div className="loading-spinner" /></div> : items.length === 0 ? <div className="admin-empty"><BadgeCheck size={26} /><strong>No active resident cards</strong><span>Cards will appear here after resident approval and activation.</span></div> : <div className="sticker-grid card-export-grid">
       {items.map((resident) => <article className={`sticker-record card-export-record ${selected.includes(resident.id) ? 'selected' : ''}`} key={resident.id}>
         <label className="sticker-select"><input type="checkbox" checked={selected.includes(resident.id)} onChange={() => toggle(resident.id)} /><span>{resident.fullName}</span></label>
         <small>{resident.neighbourhood} · {resident.card.membershipId}</small>
         <div className="admin-card-render" ref={(node) => { cardRefs.current[resident.id] = node; }}>
           <div className="admin-card-head"><div><span>BERA</span><strong>Bodija<br />Value Card</strong><small>Value. Community. Growth.</small></div><em><i /> ACTIVE</em></div>
-          <div className="admin-card-qr"><QRCode value={resident.card.qrToken} size={112} bgColor="#ffffff" fgColor="#512b6c" /></div>
+          <div className="admin-card-qr"><EncryptedQRCode token={resident.card.qrToken} size={112} bgColor="#ffffff" fgColor="#1a3558" /></div>
           <div className="admin-card-member"><small>{resident.memberCategory}</small><h3>{resident.fullName}</h3><span>{resident.card.membershipId.length <= 4 ? '****' : `${resident.card.membershipId.slice(0, -4)}****`}</span></div>
           <div className="admin-card-foot"><div><small>Cluster</small><strong>{resident.neighbourhood}</strong></div><div><small>Valid until</small><strong>{resident.card.expiresAt ? formatDate(resident.card.expiresAt) : 'No expiry'}</strong></div></div>
         </div>
@@ -1393,13 +1393,13 @@ function StickerExportsPanel({ token }: { token: string }) {
     </div>
     <div className="sticker-toolbar"><label><input type="checkbox" checked={items.length > 0 && selected.length === items.length} onChange={selectAll} /> Select all ({selected.length})</label><button className="primary-button" disabled={exporting || !selected.length} onClick={() => void exportStickers(selected)}><Download size={17} /> {exporting ? 'Preparing downloads…' : downloaded ? 'Re-download selected' : 'Bulk download stickers'}</button></div>
     {message && <div className={message.includes('recorded') ? 'profile-success' : 'auth-error'}>{message}</div>}
-    {loading ? <div className="admin-empty"><RefreshCw size={22} /><strong>Loading sticker queue…</strong></div> : items.length === 0 ? <div className="admin-empty"><BadgeCheck size={26} /><strong>{downloaded ? 'No downloaded stickers yet' : 'All eligible residents have been downloaded'}</strong><span>{downloaded ? 'Exports will appear here after their first download.' : 'New approved residents will appear here automatically.'}</span></div> : <div className="sticker-grid">
+    {loading ? <div className="admin-empty"><div className="loading-spinner" /></div> : items.length === 0 ? <div className="admin-empty"><BadgeCheck size={26} /><strong>{downloaded ? 'No downloaded stickers yet' : 'All eligible residents have been downloaded'}</strong><span>{downloaded ? 'Exports will appear here after their first download.' : 'New approved residents will appear here automatically.'}</span></div> : <div className="sticker-grid">
       {items.map((resident) => <article className={`sticker-record ${selected.includes(resident.id) ? 'selected' : ''}`} key={resident.id}>
         <label className="sticker-select"><input type="checkbox" checked={selected.includes(resident.id)} onChange={() => toggle(resident.id)} /><span>{resident.fullName}</span></label>
         <small>{resident.street} · {resident.card.membershipId}</small>
         <div className="vehicle-sticker" ref={(node) => { stickerRefs.current[resident.id] = node; }}>
           <div className="sticker-code"><b>{resident.stickerCode.split(' ')[0]}</b><strong>{resident.stickerCode.split(' ')[1]}</strong></div>
-          <div className="sticker-qr"><QRCode value={resident.card.qrToken} size={112} bgColor="#ffffff" fgColor="#080808" /></div>
+          <div className="sticker-qr"><EncryptedQRCode token={resident.card.qrToken} size={112} bgColor="#ffffff" fgColor="#080808" /></div>
           <em>Bodija Value Card</em>
         </div>
         <div className="sticker-record-foot"><span>{downloaded ? `Downloaded ${resident.stickerDownloadCount} time${resident.stickerDownloadCount === 1 ? '' : 's'}` : 'New sticker'}</span><button className="text-button" onClick={() => void exportStickers([resident.id])}>Download one</button></div>
@@ -1456,7 +1456,7 @@ function AdminMyCard({ token }: { token: string }) {
     setDownloading(true);
     try {
       const { default: html2canvas } = await import('html2canvas');
-      const canvas = await html2canvas(cardRef.current, { scale: 3, backgroundColor: '#291839', useCORS: true });
+      const canvas = await html2canvas(cardRef.current, { scale: 3, backgroundColor: '#0f2440', useCORS: true });
       const link = document.createElement('a');
       link.download = `bodija-admin-card-${card.cardNumber}.png`;
       link.href = canvas.toDataURL('image/png');
@@ -1524,7 +1524,7 @@ function AdminMyCard({ token }: { token: string }) {
           </div>
           <div style={{ minWidth: 148, minHeight: 148, background: '#fff', borderRadius: 12, padding: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {card
-              ? <QRCode value={card.qrToken} size={128} bgColor="#ffffff" fgColor="#291839" />
+              ? <EncryptedQRCode token={card.qrToken} size={128} bgColor="#ffffff" fgColor="#1a3558" />
               : <CreditCard size={64} style={{ color: '#ccc' }} />
             }
           </div>
@@ -1547,7 +1547,7 @@ function AdminMyCard({ token }: { token: string }) {
         {/* Actions */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           <button className="outline-button" onClick={() => void downloadCard()} disabled={!card || downloading}>
-            <Download size={16} /> {downloading ? 'Saving…' : 'Download card'}
+            <Download size={16} /> {downloading ? <div className="loading-spinner" /> : 'Download card'}
           </button>
           {card && card.status !== 'SUSPENDED' && (
             <button
@@ -1617,7 +1617,7 @@ function AdminMyCard({ token }: { token: string }) {
               <div className="modal-actions">
                 <button type="button" className="secondary-button" onClick={() => setShowMisuseModal(false)}>Cancel</button>
                 <button type="submit" className="primary-button" disabled={reportingMisuse || !misuseDesc.trim()}>
-                  {reportingMisuse ? 'Submitting…' : 'Submit report'}
+                  {reportingMisuse ? <div className="loading-spinner" /> : 'Submit report'}
                 </button>
               </div>
             </form>

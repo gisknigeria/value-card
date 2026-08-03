@@ -58,7 +58,18 @@ export class DependantsService {
 
   // ── Resident: create dependant ───────────────────────────────────────
   async create(userId: string, input: CreateDependantDto) {
-    const resident = await this.requireResident(userId);
+    const resident = await this.prisma.resident.findUnique({
+      where: { userId },
+      select: { id: true, approvalStatus: true, registrationType: true },
+    });
+    if (!resident) throw new NotFoundException('Resident profile not found');
+
+    if (resident.registrationType !== 'FAMILY') {
+      throw new ForbiddenException(
+        'Only residents registered under a family account can add dependants.',
+      );
+    }
+
     const phone = input.phone?.replace(/[\s-]/g, '') ?? null;
 
     const dependant = await this.prisma.dependant.create({

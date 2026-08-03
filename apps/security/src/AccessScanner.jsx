@@ -5,6 +5,7 @@ import {
   MdVerifiedUser, MdWarning, MdWifiOff, MdImage, MdKeyboard,
   MdStopCircle, MdConfirmationNumber,
 } from "react-icons/md";
+import { decodeQrPayload } from "./qr.js";
 
 const API = "/api";
 const SCAN_COOLDOWN_MS = 3000;
@@ -150,7 +151,10 @@ export default function AccessScanner({ session, onClose }) {
         const video = videoRef.current;
         if (!video || video.readyState < 2) return;
         const value = await decodeQR(video);
-        if (value) { stopCamera(); setToken(value); verify(value); }
+        if (value) {
+          const token = await decodeQrPayload(value);
+          stopCamera(); setToken(token); verify(token);
+        }
       }, 500);
     } catch (error) {
       const msg = error.name === "NotAllowedError"
@@ -172,7 +176,10 @@ export default function AccessScanner({ session, onClose }) {
     setPhotoError(""); setPhotoLoading(true);
     try {
       const value = await decodeQRFromFile(file);
-      if (value) { setToken(value); verify(value); }
+      if (value) {
+        const decoded = await decodeQrPayload(value);
+        setToken(decoded); verify(decoded);
+      }
       else setPhotoError("No QR code found in this image. Make sure the QR code is clear and well-lit.");
     } finally {
       setPhotoLoading(false);

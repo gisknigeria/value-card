@@ -21,9 +21,12 @@
 
 /* Private card number and text-free loading states */
 .value-card .member-details h2{
-  font-size:clamp(15px,1.8vw,20px)!important;
-  line-height:1.08!important;
-  letter-spacing:-.025em!important;
+  font-family:'Courier New',Courier,monospace!important;
+  font-size:clamp(11px,1.3vw,14px)!important;
+  line-height:1.1!important;
+  letter-spacing:.04em!important;
+  text-transform:uppercase!important;
+  font-weight:600!important;
 }
 .loading-spinner{
   display:inline-block;

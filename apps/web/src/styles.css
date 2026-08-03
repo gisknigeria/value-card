@@ -157,7 +157,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 .page-content, .admin-main { width: min(1380px, 100%); }
 .page-content { padding: 34px clamp(18px, 3vw, 44px) 60px; }
-.value-card { border-radius: 22px; background: linear-gradient(145deg, #0a4050, #092e3c 72%); box-shadow: 0 24px 60px rgba(6,48,63,.24); }
+.value-card { border-radius: 22px; background: #3d1a56; box-shadow: 0 24px 60px rgba(61,26,86,.28); }
 .metric, .offer-strip, .directory-list, .activity-item, .profile-form, .admin-workspace, .admin-metric, .dependant-card {
   border-radius: var(--radius-md);
   border-color: #d7e3e8;

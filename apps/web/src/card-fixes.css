@@ -2,7 +2,7 @@
 .value-card .member-details{right:calc(24px + clamp(77px,16vw,126px) + 20px)!important;max-width:none!important;overflow:hidden}.value-card .member-details h2{overflow-wrap:anywhere}@media(max-width:620px){.value-card .member-details{right:106px!important;max-width:none!important}}
 
 /* Member name is deliberately secondary to the card identity and QR. */
-.value-card .member-details h2{font-size:clamp(18px,2.1vw,24px)!important;line-height:1.05!important}
+.value-card .member-details h2{font-size:clamp(11px,1.3vw,14px)!important;line-height:1.1!important;font-family:'Courier New',Courier,monospace!important;font-weight:600!important;letter-spacing:.04em!important;text-transform:uppercase!important}
 
 /* Mobile-first safeguards for every portal workspace. */
 @media(max-width:760px){

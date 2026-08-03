@@ -39,8 +39,8 @@ import {
   ShieldOff,
   Flag,
 } from 'lucide-react';
-import QRCode from 'react-qr-code';
 import AuthScreen from './AuthScreen';
+import EncryptedQRCode from './EncryptedQRCode';
 import {
   getResident,
   updateResidentProfile,
@@ -127,7 +127,7 @@ function Sidebar({ view, setView, open, close, resident, logout }: { view: View;
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         <div className="sidebar-head"><Brand /><button className="icon-button mobile-only" onClick={close} aria-label="Close menu"><X size={20} /></button></div>
         <nav className="main-nav" aria-label="Main navigation">
-          {navItems.map(({ id, label, icon: Icon }) => (
+          {navItems.filter(({ id }) => id !== 'dependants' || resident.registrationType === 'FAMILY').map(({ id, label, icon: Icon }) => (
             <button key={id} className={view === id ? 'active' : ''} onClick={() => { setView(id); close(); }}>
               <Icon size={19} strokeWidth={1.8} /><span>{label}</span>
             </button>
@@ -286,7 +286,7 @@ function ValueCard({ resident, compact = false, cardRef, showPin = false }: { re
   return (
     <div className={`value-card ${compact ? 'compact' : ''}`} ref={cardRef}>
       <div className="card-top"><div className="card-programme-title"><span>BERA</span><strong>Bodija<br />Value Card</strong><small>Value. Community. Growth.</small></div><span className={`card-active ${isActive ? '' : 'pending'}`}><i /> {card ? humanStatus(card.status) : 'Not issued'}</span></div>
-      {card && <div className="qr"><QRCode value={card.qrToken} size={compact ? 68 : 126} bgColor="#ffffff" fgColor="#512b6c" /></div>}
+      {card && <div className="qr"><EncryptedQRCode token={card.qrToken} size={compact ? 68 : 126} bgColor="#ffffff" fgColor="#291839" /></div>}
       <div className="member-details"><small>{resident.memberCategory}</small><h2>{resident.fullName}</h2><span>{privateCardNumber(card?.membershipId, showPin)}</span></div>
       <div className="card-bottom"><div><small>Cluster</small><strong>{resident.neighbourhood}</strong></div><div><small>Valid until</small><strong>{formatDate(card?.expiresAt)}</strong></div></div>
     </div>
@@ -509,7 +509,7 @@ function CardPage({ resident, token, onCardDeactivated }: { resident: ResidentPr
   const handleCreatePass = async (e: React.FormEvent) => {
     e.preventDefault();
     if (passes.length >= 5) {
-      setPassError('You can have at most 5 active visitor passes. Delete an existing one to create a new one.');
+      setPassError('You can have at most 5 active visitor pass codes. Delete an existing one to create a new one.');
       return;
     }
     setCreatingPass(true);
@@ -702,7 +702,7 @@ function CardPage({ resident, token, onCardDeactivated }: { resident: ResidentPr
       <div className="visitor-passes-section">
         <div className="section-title" style={{ marginBottom: 12 }}>
           <div>
-            <h3><Ticket size={17} style={{ marginRight: 7, verticalAlign: 'middle' }} />Visitor passes</h3>
+            <h3><Ticket size={17} style={{ marginRight: 7, verticalAlign: 'middle' }} />Visitor pass</h3>
             <p className="section-subtitle">Generate a one-time gate code for a guest. Each code works once and expires after 24 hours.</p>
           </div>
           {canCreatePass && (
@@ -713,7 +713,7 @@ function CardPage({ resident, token, onCardDeactivated }: { resident: ResidentPr
         </div>
 
         {!active && (
-          <p className="pass-inactive-note">Visitor passes are only available when your card is active.</p>
+          <p className="pass-inactive-note">Visitor pass is only available when your card is active.</p>
         )}
 
         {showPassForm && (
@@ -738,7 +738,7 @@ function CardPage({ resident, token, onCardDeactivated }: { resident: ResidentPr
         {passesLoading ? (
           <div className="inline-loading"><LoadingSpinner /></div>
         ) : passes.length === 0 ? (
-          <p className="pass-inactive-note">No visitor passes yet.{active ? ' Create one above.' : ''}</p>
+          <p className="pass-inactive-note">No visitor pass yet.{active ? ' Create one above.' : ''}</p>
         ) : (
           <div className="visitor-pass-list">
             {passes.map(pass => {
@@ -1006,7 +1006,7 @@ function dependantStatusTone(status: string) {
   return 'timeline-pending';
 }
 
-function DependantsPage({ token }: { token: string }) {
+function DependantsPage({ token, resident }: { token: string; resident: ResidentProfile }) {
   const [dependants, setDependants] = useState<Dependant[]>([]);
   const [primaryStatus, setPrimaryStatus] = useState<string>('PENDING');
   const [loading, setLoading] = useState(true);
@@ -1108,10 +1108,22 @@ function DependantsPage({ token }: { token: string }) {
             receive their own cards, including minors.
           </p>
         </div>
-        <button className="primary-button" onClick={openAdd}>
-          <Plus size={16} /> Add dependant
-        </button>
+        {resident.registrationType === 'FAMILY' && (
+          <button className="primary-button" onClick={openAdd}>
+            <Plus size={16} /> Add dependant
+          </button>
+        )}
       </section>
+
+      {resident.registrationType !== 'FAMILY' && (
+        <div className="approval-timeline timeline-pending" style={{ marginBottom: 18 }}>
+          <span className="timeline-icon"><AlertTriangle size={18} /></span>
+          <div className="timeline-body">
+            <strong>Not available for individual accounts</strong>
+            <p>Only residents registered under a family account can add dependants.</p>
+          </div>
+        </div>
+      )}
 
       {primaryPaused && (
         <div className="approval-timeline timeline-pending" style={{ marginBottom: 18 }}>
@@ -1227,7 +1239,7 @@ function DependantsPage({ token }: { token: string }) {
                 </div>
                 {isApproved && d.cardStatus === 'ACTIVE' && (
                   <div style={{ background: '#fff', padding: 8, borderRadius: 8, textAlign: 'center' }}>
-                    <QRCode value={d.qrToken} size={72} bgColor="#ffffff" fgColor="#12344d" />
+                    <EncryptedQRCode token={d.qrToken} size={72} bgColor="#ffffff" fgColor="#12344d" />
                     <small style={{ display: 'block', marginTop: 4 }}>{d.membershipId}</small>
                   </div>
                 )}
@@ -1442,7 +1454,7 @@ function ResidentPortal({ session, logout }: { session: AuthSession; logout: () 
         {activeView === 'directory' && <Directory token={session.accessToken} />}
         {activeView === 'card' && <CardPage resident={resident} token={session.accessToken} onCardDeactivated={loadDashboard} />}
         {activeView === 'activity' && <ActivityPage activity={dashboard?.recentActivity ?? []} rewardBalances={dashboard?.rewardBalances ?? []} />}
-        {activeView === 'dependants' && <DependantsPage token={session.accessToken} />}
+        {activeView === 'dependants' && <DependantsPage token={session.accessToken} resident={resident} />}
         {activeView === 'support' && <SupportPage token={session.accessToken} />}
         {activeView === 'profile' && (
           <ProfilePage
@@ -1458,7 +1470,7 @@ function ResidentPortal({ session, logout }: { session: AuthSession; logout: () 
         )}
       </main>
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {navItems.map(({ id, label, icon: Icon }) => (
+        {navItems.filter(({ id }) => id !== 'dependants' || resident.registrationType === 'FAMILY').map(({ id, label, icon: Icon }) => (
           <button key={id} className={activeView === id ? 'active' : ''} onClick={() => setView(id)} disabled={profileLocked && id !== 'home'}>
             <Icon size={19} /><span>{label === 'Explore benefits' ? 'Benefits' : label.replace('My value ', '')}</span>
           </button>
