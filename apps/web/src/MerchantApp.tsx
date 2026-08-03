@@ -1308,8 +1308,6 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
   const [memberData, setMemberData] = useState<ResidentDashboardResponse | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [sosSending, setSosSending] = useState(false);
-  const [sosMessage, setSosMessage] = useState('');
   const mu = session.merchantUser;
   const m = mu.merchant;
   const isOwner = mu.role === 'OWNER';
@@ -1330,35 +1328,6 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
     return () => window.clearInterval(timer);
   }, [loadPersonalData]);
 
-  const sendSos = async () => {
-    if (!window.confirm('Send an SOS alert to Bodija security?')) return;
-    setSosSending(true); setSosMessage('');
-    try {
-      const position = await new Promise<GeolocationPosition | null>(resolve => {
-        if (!navigator.geolocation) return resolve(null);
-        navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), { timeout: 8000 });
-      });
-      const securityUrl = (import.meta as any).env?.VITE_SECURITY_API_URL || '';
-      const response = await fetch(`${securityUrl}/api/resident/sos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.accessToken}` },
-        body: JSON.stringify({
-          name: mu.user.displayName || m.contactPerson,
-          phone: mu.user.phone,
-          lat: position?.coords.latitude,
-          lng: position?.coords.longitude,
-          unit: m.associationName || m.location,
-          command: m.associationName || 'Bodija',
-          type: 'Merchant SOS',
-          message: `SOS from ${mu.role === 'OWNER' ? 'merchant owner' : 'merchant staff'} at ${m.businessName}`,
-        }),
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.message || 'Unable to send SOS');
-      setSosMessage('SOS sent to security.');
-    } catch (e) { setSosMessage(e instanceof Error ? e.message : 'Unable to send SOS'); }
-    finally { setSosSending(false); }
-  };
 
   // Pre-load offers so ScanPanel can use them
   useEffect(() => {
@@ -1426,7 +1395,6 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
         <div className="portal-quick-actions">
           <button onClick={() => setShowChangePw(true)}><KeyRound size={17} /><span>Password</span></button>
           <button onClick={() => setView('notifications')}><Bell size={17} /><span>Alerts</span>{unreadCount > 0 && <em>{unreadCount}</em>}</button>
-          <button className="danger" onClick={() => void sendSos()} disabled={sosSending}><AlertTriangle size={17} /><span>SOS</span></button>
         </div>
         <div className="admin-account portal-sidebar-footer">
           <div><strong>{m.businessName}</strong><small>{mu.role === 'OWNER' ? 'Owner' : 'Sales staff'} · {m.category}</small></div>
@@ -1434,7 +1402,6 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
           <button onClick={() => setView('notifications')} title="Notifications" aria-label="Notifications" style={{ marginRight: 6, position: 'relative' }}>
             <Bell size={18} />{unreadCount > 0 && <span style={{ position: 'absolute', top: 2, right: 2, background: '#dc2626', color: '#fff', borderRadius: 9, minWidth: 16, fontSize: 9 }}>{unreadCount}</span>}
           </button>
-          <button onClick={() => void sendSos()} disabled={sosSending} title="Send SOS" aria-label="Send SOS" style={{ marginRight: 6, color: '#b42318' }}><AlertTriangle size={18} /></button>
           <button onClick={logout} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
         </div>
       </aside>
@@ -1443,7 +1410,6 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
         <MerchantBrand />
         <div className="portal-mobile-actions">
           <button onClick={() => setView('notifications')} aria-label="Notifications"><Bell size={18} />{unreadCount > 0 && <em>{unreadCount}</em>}</button>
-          <button className="danger" onClick={() => void sendSos()} disabled={sosSending} aria-label="Send SOS"><AlertTriangle size={18} /></button>
           <button onClick={logout} aria-label="Sign out"><LogOut size={18} /></button>
         </div>
       </header>
@@ -1527,7 +1493,6 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
         {view === 'walkins'      && <WalkInsPanel token={session.accessToken} merchantId={m.id} />}
         {view === 'staff'        && <StaffPanel token={session.accessToken} isOwner={isOwner} />}
         {view === 'profile'      && <MerchantProfile m={m} mu={mu} />}
-        {sosMessage && <div className={sosMessage.startsWith('SOS sent') ? 'profile-success' : 'auth-error'} style={{ marginTop: 14 }}>{sosMessage}</div>}
       </main>
     </div>
   );

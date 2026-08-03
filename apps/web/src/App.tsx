@@ -141,15 +141,12 @@ function Sidebar({ view, setView, open, close, resident, logout }: { view: View;
   );
 }
 
-function Header({ title, openMenu, resident, unreadCount, onBellClick, onSosClick, sosSending }: { title: string; openMenu: () => void; resident: ResidentProfile; unreadCount: number; onBellClick: () => void; onSosClick: () => void; sosSending: boolean }) {
+function Header({ title, openMenu, resident, unreadCount, onBellClick }: { title: string; openMenu: () => void; resident: ResidentProfile; unreadCount: number; onBellClick: () => void }) {
   return (
     <header className="topbar">
       <button className="icon-button menu-button" onClick={openMenu} aria-label="Open menu"><Menu size={21} /></button>
       <div><span className="eyebrow">Resident portal</span><h1>{title}</h1></div>
       <div className="top-actions">
-        <button className="sos-button" onClick={onSosClick} disabled={sosSending} title="Send SOS alert to security">
-          <AlertTriangle size={17} /> {sosSending ? 'Sending' : 'SOS'}
-        </button>
         <button className="icon-button notification" aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`} onClick={onBellClick}>
           <Bell size={20} />
           {unreadCount > 0 && <i />}
@@ -1249,8 +1246,6 @@ function ResidentPortal({ session, logout }: { session: AuthSession; logout: () 
   const [dashboard, setDashboard] = useState<ResidentDashboardResponse | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [sosSending, setSosSending] = useState(false);
-  const [sosMessage, setSosMessage] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -1300,40 +1295,6 @@ function ResidentPortal({ session, logout }: { session: AuthSession; logout: () 
     }
   };
 
-  const sendSos = async () => {
-    setSosSending(true);
-    setSosMessage(null);
-    try {
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000 });
-      });
-      const securityUrl = (import.meta.env.VITE_SECURITY_API_URL || 'http://127.0.0.1:5001').replace(/\/$/, '');
-      const response = await fetch(`${securityUrl}/api/resident/sos`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.accessToken}`,
-        },
-        body: JSON.stringify({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          name: resident.fullName || 'Resident',
-          text: `${resident.card?.membershipId || 'Resident'} emergency alert`,
-          type: 'Resident SOS',
-          unit: resident.neighbourhood,
-          command: resident.neighbourhood,
-        }),
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.message || 'Unable to send SOS alert');
-      setSosMessage('SOS sent to security with your current location.');
-    } catch (error) {
-      setSosMessage(error instanceof Error ? error.message : 'Unable to send SOS alert.');
-    } finally {
-      setSosSending(false);
-    }
-  };
 
   const titles: Record<View, string> = { home: 'Overview', directory: 'Explore benefits', card: 'My value card', activity: 'Activity', profile: 'My profile', dependants: 'Dependants', support: 'Help and support' };
   const profileLocked = !resident.isProfileComplete;
@@ -1349,8 +1310,6 @@ function ResidentPortal({ session, logout }: { session: AuthSession; logout: () 
           resident={resident}
           unreadCount={unreadCount}
           onBellClick={() => setNotifOpen(true)}
-          onSosClick={sendSos}
-          sosSending={sosSending}
         />
         <NotificationPanel
           open={notifOpen}
@@ -1359,7 +1318,6 @@ function ResidentPortal({ session, logout }: { session: AuthSession; logout: () 
           onMarkRead={handleMarkRead}
           onMarkAllRead={handleMarkAllRead}
         />
-        {sosMessage && <div className={sosMessage.startsWith('SOS sent') ? 'profile-success' : 'auth-error'} role="status" style={{ margin: '0 24px 14px' }}>{sosMessage}</div>}
         {profileLocked && (
           <div className="profile-reapproval-warning" role="alert" style={{ margin: '0 24px 14px' }}>
             <AlertTriangle size={16} />
