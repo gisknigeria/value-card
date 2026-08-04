@@ -1,16 +1,16 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import {
   ArrowRight,
   CheckCircle2,
   Eye,
   EyeOff,
   LockKeyhole,
-  MapPin,
   Phone,
   UserRound,
   Users,
+  TicketCheck,
 } from 'lucide-react';
-import { getResidentDirectory, loginAdmin, loginResident, registerResident, type AuthSession, type ResidentDirectory } from './api';
+import { getRegistrationSticker, loginAdmin, loginResident, registerResident, type AuthSession, type RegistrationSticker } from './api';
 
 type Mode = 'login' | 'register';
 
@@ -19,11 +19,13 @@ interface AuthScreenProps {
 }
 
 export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
-  const [mode, setMode] = useState<Mode>('login');
+  const stickerFromQr = new URLSearchParams(window.location.search).get('sticker') || '';
+  const [mode, setMode] = useState<Mode>(stickerFromQr ? 'register' : 'login');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({
+    stickerCode: stickerFromQr.toUpperCase(),
     fullName: '',
     phone: '',
     email: '',
@@ -39,17 +41,24 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   const [familyMembers, setFamilyMembers] = useState([
     { fullName: '', relationship: '', phone: '', dateOfBirth: '', isMinor: false },
   ]);
-  const [directory, setDirectory] = useState<ResidentDirectory | null>(null);
+  const [stickerInfo, setStickerInfo] = useState<RegistrationSticker | null>(null);
+  const [stickerError, setStickerError] = useState('');
+  const [stickerChecking, setStickerChecking] = useState(false);
   useEffect(() => {
-    getResidentDirectory().then(setDirectory).catch(() => {});
-  }, []);
-  const streetOptions = useMemo(
-    () => [
-      ...(directory?.associations.flatMap(a => a.streets.map(s => ({ street: s.name, association: a.name }))) || []),
-      ...(directory?.unassignedStreets.map(s => ({ street: s.name, association: '' })) || []),
-    ].sort((a, b) => a.street.localeCompare(b.street)),
-    [directory],
-  );
+    if (mode !== 'register' || form.stickerCode.trim().length < 8) {
+      setStickerInfo(null);
+      setStickerError('');
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setStickerChecking(true);
+      getRegistrationSticker(form.stickerCode)
+        .then(info => { setStickerInfo(info); setStickerError(''); })
+        .catch(err => { setStickerInfo(null); setStickerError(err instanceof Error ? err.message : 'Sticker code not found'); })
+        .finally(() => setStickerChecking(false));
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [form.stickerCode, mode]);
 
   const update = (field: keyof typeof form, value: string | boolean) => {
     setForm(current => ({ ...current, [field]: value }));
@@ -84,12 +93,11 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
       }
 
       const session = await registerResident({
+            stickerCode: form.stickerCode,
             fullName: form.fullName,
             phone: form.phone,
             email: form.email || undefined,
             password: form.password,
-            neighbourhood: form.neighbourhood,
-            streetName: form.streetName,
             memberCategory: form.memberCategory,
             registrationType: form.registrationType,
             householdRole: form.householdRole,
@@ -141,7 +149,7 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
               <strong>RESIDENT PORTAL</strong>
             </div>
           <h2>{mode === 'login' ? 'Welcome back' : 'Create your resident account'}</h2>
-            <p>{mode === 'login' ? 'Sign in with your email address or phone number.' : 'Create your login first, then complete your resident profile for approval.'}</p>
+            <p>{mode === 'login' ? 'Sign in with your email address or phone number.' : 'Use the code on the community sticker issued for your street.'}</p>
           </div>
 
           <div className="auth-tabs" role="tablist" aria-label="Account action">
@@ -153,6 +161,13 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             {mode === 'register' && (
               <>
                 <label>
+                  <span>Community sticker code</span>
+                  <div className="auth-input"><TicketCheck size={18} /><input required autoComplete="off" value={form.stickerCode} onChange={event => update('stickerCode', event.target.value.toUpperCase())} placeholder="BVC-ABC-1234-0001" /></div>
+                </label>
+                {stickerChecking && <small>Checking sticker code…</small>}
+                {stickerInfo && <div className="sticker-code-confirmed"><CheckCircle2 size={18} /><div><strong>Sticker confirmed</strong><span>{stickerInfo.streetName}{stickerInfo.associationName ? ` — ${stickerInfo.associationName}` : ''}</span></div></div>}
+                {stickerError && <div className="auth-error" role="alert">{stickerError}</div>}
+                <label>
                   <span>Full name</span>
                   <div className="auth-input"><UserRound size={18} /><input autoComplete="name" value={form.fullName} onChange={event => update('fullName', event.target.value)} placeholder="Can be completed after login" /></div>
                 </label>
@@ -161,18 +176,7 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                     <span>Phone number</span>
                     <div className="auth-input"><Phone size={18} /><input required autoComplete="tel" value={form.phone} onChange={event => update('phone', event.target.value)} placeholder="0803 000 0000" /></div>
                   </label>
-                  <label>
-                    <span>Street</span>
-                    <div className="auth-input"><MapPin size={18} /><select required value={form.streetSelection} onChange={event => {
-                      const selected = streetOptions[Number(event.target.value)];
-                      setForm(current => ({ ...current, streetSelection: event.target.value, streetName: selected?.street || '', neighbourhood: selected?.association || '' }));
-                    }}>
-                      <option value="">Select your street</option>
-                      {streetOptions.map((item, index) => <option key={`${item.street}-${item.association}-${index}`} value={index}>{item.street}{item.association ? ` — ${item.association}` : ''}</option>)}
-                    </select></div>
-                  </label>
                 </div>
-                {form.neighbourhood && <small>Your confirming association: <strong>{form.neighbourhood}</strong></small>}
                 <div className="auth-field-row">
                   <label>
                     <span>Registration type</span>

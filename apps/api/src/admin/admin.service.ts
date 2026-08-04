@@ -65,32 +65,83 @@ export class AdminService {
     return { residents, total, page, pageSize: PAGE_SIZE, counts: { pending, approved, rejected, suspended } };
   }
 
-  async stickers(downloaded: boolean, adminUserId?: string) {
-    const scope = await this.residentScope(adminUserId);
-    const residents = await this.prisma.resident.findMany({
+  async stickerStreets(adminUserId: string) {
+    const where = await this.stickerStreetScope(adminUserId);
+    return this.prisma.associationStreet.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        association: { select: { name: true } },
+        _count: { select: { stickers: true } },
+      },
+      orderBy: [{ association: { name: 'asc' } }, { name: 'asc' }],
+    });
+  }
+
+  async stickers(status = 'READY', adminUserId?: string) {
+    const normalizedStatus = ['READY', 'PRINTED', 'CLAIMED'].includes(status) ? status : 'READY';
+    const street = await this.stickerStreetScope(adminUserId);
+    return this.prisma.streetSticker.findMany({
       where: {
-        ...scope,
-        approvalStatus: ApprovalStatus.APPROVED,
-        card: { isNot: null },
-        stickerDownloadedAt: downloaded ? { not: null } : null,
+        street,
+        ...(normalizedStatus === 'READY' ? { residentId: null, downloadedAt: null } : {}),
+        ...(normalizedStatus === 'PRINTED' ? { residentId: null, downloadedAt: { not: null } } : {}),
+        ...(normalizedStatus === 'CLAIMED' ? { residentId: { not: null } } : {}),
       },
       select: {
-        id: true, fullName: true, streetName: true, residentialAddress: true,
-        stickerDownloadedAt: true, stickerDownloadCount: true,
-        card: { select: { membershipId: true, qrToken: true } },
+        id: true,
+        code: true,
+        sequence: true,
+        downloadedAt: true,
+        downloadCount: true,
+        claimedAt: true,
+        street: { select: { id: true, name: true, association: { select: { name: true } } } },
+        resident: { select: { id: true, fullName: true } },
       },
-      orderBy: [{ streetName: 'asc' }, { createdAt: 'asc' }],
+      orderBy: [{ street: { name: 'asc' } }, { sequence: 'asc' }],
     });
+  }
 
-    const streetPositions = new Map<string, number>();
-    return residents.map((resident) => {
-      const street = (resident.streetName || 'Unassigned street').trim();
-      const key = street.toLocaleLowerCase();
-      const position = (streetPositions.get(key) || 0) + 1;
-      streetPositions.set(key, position);
-      const letters = street.replace(/[^a-z]/gi, '').slice(0, 2).toUpperCase().padEnd(2, 'X');
-      return { ...resident, street, stickerCode: `${letters} ${String(position).padStart(2, '0')}` };
+  async generateStickers(streetId: string, quantity: number, adminUserId: string) {
+    const streetScope = await this.stickerStreetScope(adminUserId);
+    const street = await this.prisma.associationStreet.findFirst({
+      where: { id: streetId, ...streetScope },
+      select: { id: true, name: true },
     });
+    if (!street) throw new NotFoundException('Street not found or outside your association');
+
+    const aggregate = await this.prisma.streetSticker.aggregate({
+      where: { streetId },
+      _max: { sequence: true },
+    });
+    const firstSequence = (aggregate._max.sequence || 0) + 1;
+    const letters = street.name.replace(/[^a-z0-9]/gi, '').slice(0, 3).toUpperCase().padEnd(3, 'X');
+    const streetKey = street.id.replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase().padStart(4, 'X');
+    const data = Array.from({ length: quantity }, (_, index) => {
+      const sequence = firstSequence + index;
+      return {
+        streetId,
+        sequence,
+        code: `BVC-${letters}-${streetKey}-${String(sequence).padStart(4, '0')}`,
+        createdBy: adminUserId,
+      };
+    });
+    await this.prisma.streetSticker.createMany({ data });
+    const created = await this.prisma.streetSticker.findMany({
+      where: {
+        streetId,
+        sequence: { gte: firstSequence, lte: firstSequence + data.length - 1 },
+      },
+      select: { id: true },
+      orderBy: { sequence: 'asc' },
+    });
+    return {
+      generated: data.length,
+      stickerIds: created.map(item => item.id),
+      firstSequence,
+      lastSequence: firstSequence + data.length - 1,
+    };
   }
 
   async cards(adminUserId?: string) {
@@ -119,18 +170,18 @@ export class AdminService {
     });
   }
 
-  async markStickersExported(residentIds: string[], adminUserId: string) {
-    const ids = [...new Set(residentIds.filter(Boolean))];
-    if (!ids.length) throw new BadRequestException('Select at least one resident');
-    const scope = await this.residentScope(adminUserId);
-    const valid = await this.prisma.resident.findMany({
-      where: { id: { in: ids }, ...scope, approvalStatus: ApprovalStatus.APPROVED, card: { isNot: null } },
+  async markStickersExported(stickerIds: string[], adminUserId: string) {
+    const ids = [...new Set(stickerIds.filter(Boolean))];
+    if (!ids.length) throw new BadRequestException('Select at least one sticker');
+    const street = await this.stickerStreetScope(adminUserId);
+    const valid = await this.prisma.streetSticker.findMany({
+      where: { id: { in: ids }, street },
       select: { id: true },
     });
-    if (!valid.length) throw new BadRequestException('No eligible residents were selected');
-    await this.prisma.resident.updateMany({
+    if (!valid.length) throw new BadRequestException('No eligible stickers were selected');
+    await this.prisma.streetSticker.updateMany({
       where: { id: { in: valid.map((item) => item.id) } },
-      data: { stickerDownloadedAt: new Date(), stickerDownloadCount: { increment: 1 } },
+      data: { downloadedAt: new Date(), downloadCount: { increment: 1 } },
     });
     return { exported: valid.length };
   }
@@ -193,6 +244,11 @@ export class AdminService {
         userId: true,
         fullName: true,
         neighbourhood: true,
+        streetName: true,
+        residentialAddress: true,
+        residencyType: true,
+        householdSize: true,
+        householdRole: true,
         memberCategory: true,
         user: { select: { phone: true } },
         dependants: { select: { fullName: true, relationship: true } },
@@ -513,9 +569,29 @@ export class AdminService {
     return {};
   }
 
+  private async stickerStreetScope(adminUserId?: string): Promise<Prisma.AssociationStreetWhereInput> {
+    if (!adminUserId) return {};
+    const user = await this.prisma.user.findUnique({
+      where: { id: adminUserId },
+      select: { adminRole: true, associationName: true },
+    });
+    if (user?.adminRole === AdminRole.ASSOCIATION_REP) {
+      if (!user.associationName?.trim()) {
+        throw new ForbiddenException('Association representative has no association assigned');
+      }
+      return { association: { name: { equals: user.associationName.trim(), mode: 'insensitive' } } };
+    }
+    return {};
+  }
+
   private isProfileComplete(resident: {
     fullName: string;
     neighbourhood: string;
+    streetName: string | null;
+    residentialAddress: string | null;
+    residencyType: string | null;
+    householdSize: number | null;
+    householdRole: string | null;
     memberCategory: string;
     user: { phone: string };
     dependants: { fullName: string; relationship: string }[];
@@ -523,9 +599,14 @@ export class AdminService {
     return [
       resident.fullName,
       resident.neighbourhood,
+      resident.streetName,
+      resident.residentialAddress,
+      resident.residencyType,
+      resident.householdRole,
       resident.memberCategory,
       resident.user.phone,
     ].every(value => Boolean(value?.trim())) &&
+      Boolean(resident.householdSize && resident.householdSize > 0) &&
       resident.dependants.every(dependant =>
         Boolean(dependant.fullName?.trim()) && Boolean(dependant.relationship?.trim()),
       );

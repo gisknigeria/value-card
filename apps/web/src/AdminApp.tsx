@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import EncryptedQRCode from './EncryptedQRCode';
+import QRCode from 'react-qr-code';
 import { getMembershipCardTheme } from './cardTheme';
 import {
   AlertTriangle,
@@ -1254,14 +1255,22 @@ function AdminWalkInPanel({ token }: { token: string }) {
 
 // ── Admin dashboard ───────────────────────────────────────────────────
 
-interface StickerResident {
+interface StreetStickerItem {
   id: string;
-  fullName: string;
-  street: string;
-  stickerCode: string;
-  stickerDownloadedAt: string | null;
-  stickerDownloadCount: number;
-  card: { membershipId: string; qrToken: string };
+  code: string;
+  sequence: number;
+  downloadedAt: string | null;
+  downloadCount: number;
+  claimedAt: string | null;
+  street: { id: string; name: string; association: { name: string } | null };
+  resident: { id: string; fullName: string } | null;
+}
+
+interface StickerStreet {
+  id: string;
+  name: string;
+  association: { name: string } | null;
+  _count: { stickers: number };
 }
 
 interface CardExportResident {
@@ -1286,7 +1295,7 @@ function CardExportsPanel({ token }: { token: string }) {
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const load = useCallback(async () => {
-    setLoading(true); setMessage('');
+    setLoading(true);
     try {
       const result = await apiRequest<CardExportResident[]>('/api/admin/cards', { headers: { Authorization: `Bearer ${token}` } });
       setItems(result);
@@ -1346,45 +1355,111 @@ function CardExportsPanel({ token }: { token: string }) {
 }
 
 function StickerExportsPanel({ token }: { token: string }) {
-  const [downloaded, setDownloaded] = useState(false);
-  const [items, setItems] = useState<StickerResident[]>([]);
+  const [status, setStatus] = useState<'READY' | 'PRINTED' | 'CLAIMED'>('READY');
+  const [items, setItems] = useState<StreetStickerItem[]>([]);
+  const [streets, setStreets] = useState<StickerStreet[]>([]);
+  const [streetId, setStreetId] = useState('');
+  const [quantity, setQuantity] = useState(25);
   const [selected, setSelected] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [message, setMessage] = useState('');
   const stickerRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const generatedSelectionRef = useRef<string[]>([]);
 
   const load = useCallback(async () => {
-    setLoading(true); setMessage('');
+    setLoading(true);
     try {
-      const result = await apiRequest<StickerResident[]>(`/api/admin/stickers?downloaded=${downloaded}`, { headers: { Authorization: `Bearer ${token}` } });
+      const result = await apiRequest<StreetStickerItem[]>(`/api/admin/stickers?status=${status}`, { headers: { Authorization: `Bearer ${token}` } });
       setItems(result);
-      setSelected(downloaded ? [] : result.map((item) => item.id));
+      if (status === 'CLAIMED') setSelected([]);
+      else if (generatedSelectionRef.current.length) {
+        setSelected(generatedSelectionRef.current);
+        generatedSelectionRef.current = [];
+      } else setSelected(result.map((item) => item.id));
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to load sticker records'); }
     finally { setLoading(false); }
-  }, [downloaded, token]);
+  }, [status, token]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    apiRequest<StickerStreet[]>('/api/admin/sticker-streets', { headers: { Authorization: `Bearer ${token}` } })
+      .then(result => { setStreets(result); setStreetId(current => current || result[0]?.id || ''); })
+      .catch(error => setMessage(error instanceof Error ? error.message : 'Unable to load streets'));
+  }, [token]);
   const toggle = (id: string) => setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   const selectAll = () => setSelected(selected.length === items.length ? [] : items.map((item) => item.id));
+
+  const generate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!streetId) return;
+    setGenerating(true); setMessage('');
+    try {
+      const result = await apiRequest<{ generated: number; stickerIds: string[] }>('/api/admin/stickers/generate', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ streetId, quantity }),
+      });
+      generatedSelectionRef.current = result.stickerIds;
+      setMessage(`${result.generated} new sticker${result.generated === 1 ? '' : 's'} generated for printing.`);
+      if (status === 'READY') await load();
+      else setStatus('READY');
+      setStreets(await apiRequest<StickerStreet[]>('/api/admin/sticker-streets', { headers: { Authorization: `Bearer ${token}` } }));
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to generate stickers'); }
+    finally { setGenerating(false); }
+  };
 
   const exportStickers = async (ids: string[]) => {
     if (!ids.length) return;
     setExporting(true); setMessage('');
     try {
-      const { default: html2canvas } = await import('html2canvas');
-      for (const id of ids) {
+      const [{ default: html2canvas }, { default: JSZip }] = await Promise.all([
+        import('html2canvas'),
+        ids.length > 1 ? import('jszip') : Promise.resolve({ default: null }),
+      ]);
+      const zip = ids.length > 1 && JSZip ? new JSZip() : null;
+      const exportedIds: string[] = [];
+      const exportedStickers: StreetStickerItem[] = [];
+      for (const [index, id] of ids.entries()) {
         const node = stickerRefs.current[id];
-        const resident = items.find((item) => item.id === id);
-        if (!node || !resident) continue;
+        const sticker = items.find((item) => item.id === id);
+        if (!node || !sticker) continue;
+        setMessage(`Preparing sticker ${index + 1} of ${ids.length}…`);
         const canvas = await html2canvas(node, { scale: 3, backgroundColor: '#ffffff', useCORS: true });
-        const link = document.createElement('a');
-        link.download = `bodija-vehicle-sticker-${resident.stickerCode.replace(/\s/g, '-')}-${resident.fullName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`;
-        link.href = canvas.toDataURL('image/png');
-        link.click();
+        if (zip) {
+          const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Unable to render sticker image')), 'image/png'));
+          zip.file(`${sticker.code}.png`, blob);
+        } else {
+          const link = document.createElement('a');
+          link.download = `bodija-street-sticker-${sticker.code}.png`;
+          link.href = canvas.toDataURL('image/png');
+          link.click();
+        }
+        exportedIds.push(id);
+        exportedStickers.push(sticker);
       }
-      await apiRequest('/api/admin/stickers/export', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ residentIds: ids }) });
-      setMessage(`${ids.length} sticker${ids.length === 1 ? '' : 's'} downloaded and recorded.`);
+      if (!exportedIds.length) throw new Error('No sticker images were available to export');
+      if (zip) {
+        const csv = [
+          'Sticker code,Street,Association,Sequence',
+          ...exportedStickers.map(sticker => [sticker.code, sticker.street.name, sticker.street.association?.name || '', sticker.sequence]
+            .map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')),
+        ].join('\r\n');
+        zip.file('sticker-manifest.csv', csv);
+        setMessage(`Compressing ${exportedIds.length} sticker images into one ZIP file…`);
+        const archive = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+        const streetNames = [...new Set(exportedStickers.map(sticker => sticker.street.name))];
+        const batchName = streetNames.length === 1 ? streetNames[0] : 'mixed-streets';
+        const safeName = batchName.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+        const link = document.createElement('a');
+        link.download = `bodija-stickers-${safeName}-${exportedIds.length}.zip`;
+        link.href = URL.createObjectURL(archive);
+        link.click();
+        window.setTimeout(() => URL.revokeObjectURL(link.href), 2_000);
+      }
+      await apiRequest('/api/admin/stickers/export', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ stickerIds: exportedIds }) });
+      setMessage(`${exportedIds.length} sticker${exportedIds.length === 1 ? '' : 's'} downloaded${zip ? ' in one ZIP file' : ''} and recorded.`);
       await load();
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to create sticker download'); }
     finally { setExporting(false); }
@@ -1392,21 +1467,27 @@ function StickerExportsPanel({ token }: { token: string }) {
 
   return <section className="sticker-workspace">
     <div className="sticker-intro">
-      <div><span>Vehicle identification</span><h2>Sticker exports</h2><p>Each approved resident gets a street code and their sequence number on that street. New exports move automatically to Sticker downloaded.</p></div>
-      <div className="sticker-tabs"><button className={!downloaded ? 'active' : ''} onClick={() => setDownloaded(false)}>Ready to download</button><button className={downloaded ? 'active' : ''} onClick={() => setDownloaded(true)}>Sticker downloaded</button></div>
+      <div><span>Sticker-first registration</span><h2>Community stickers</h2><p>Generate stickers by street before resident registration. Each visible code can create one account, while its QR opens registration with the code already filled in.</p></div>
+      <div className="sticker-tabs"><button className={status === 'READY' ? 'active' : ''} onClick={() => setStatus('READY')}>Ready to print</button><button className={status === 'PRINTED' ? 'active' : ''} onClick={() => setStatus('PRINTED')}>Printed</button><button className={status === 'CLAIMED' ? 'active' : ''} onClick={() => setStatus('CLAIMED')}>Registered</button></div>
     </div>
-    <div className="sticker-toolbar"><label><input type="checkbox" checked={items.length > 0 && selected.length === items.length} onChange={selectAll} /> Select all ({selected.length})</label><button className="primary-button" disabled={exporting || !selected.length} onClick={() => void exportStickers(selected)}><Download size={17} /> {exporting ? 'Preparing downloads…' : downloaded ? 'Re-download selected' : 'Bulk download stickers'}</button></div>
-    {message && <div className={message.includes('recorded') ? 'profile-success' : 'auth-error'}>{message}</div>}
-    {loading ? <div className="admin-empty"><div className="loading-spinner" /></div> : items.length === 0 ? <div className="admin-empty"><BadgeCheck size={26} /><strong>{downloaded ? 'No downloaded stickers yet' : 'All eligible residents have been downloaded'}</strong><span>{downloaded ? 'Exports will appear here after their first download.' : 'New approved residents will appear here automatically.'}</span></div> : <div className="sticker-grid">
-      {items.map((resident) => <article className={`sticker-record ${selected.includes(resident.id) ? 'selected' : ''}`} key={resident.id}>
-        <label className="sticker-select"><input type="checkbox" checked={selected.includes(resident.id)} onChange={() => toggle(resident.id)} /><span>{resident.fullName}</span></label>
-        <small>{resident.street} · {resident.card.membershipId}</small>
-        <div className="vehicle-sticker" ref={(node) => { stickerRefs.current[resident.id] = node; }}>
-          <div className="sticker-code"><b>{resident.stickerCode.split(' ')[0]}</b><strong>{resident.stickerCode.split(' ')[1]}</strong></div>
-          <div className="sticker-qr"><EncryptedQRCode token={resident.card.qrToken} size={112} bgColor="#ffffff" fgColor="#080808" /></div>
+    <form className="sticker-generator" onSubmit={generate}>
+      <label><span>Street</span><select required value={streetId} onChange={event => setStreetId(event.target.value)}><option value="">Select a street</option>{streets.map(street => <option value={street.id} key={street.id}>{street.name}{street.association?.name ? ` — ${street.association.name}` : ''} ({street._count.stickers})</option>)}</select></label>
+      <label><span>Quantity</span><input type="number" min={1} max={500} value={quantity} onChange={event => setQuantity(Math.max(1, Math.min(500, Number(event.target.value) || 1)))} /></label>
+      <button className="primary-button" disabled={generating || !streetId}>{generating ? 'Generating…' : `Generate ${quantity} sticker${quantity === 1 ? '' : 's'}`}</button>
+    </form>
+    {status !== 'CLAIMED' && <div className="sticker-toolbar"><label><input type="checkbox" checked={items.length > 0 && selected.length === items.length} onChange={selectAll} /> Select all ({selected.length})</label><button className="primary-button" disabled={exporting || !selected.length} onClick={() => void exportStickers(selected)}><Download size={17} /> {exporting ? 'Building ZIP file…' : selected.length === 1 ? 'Download selected sticker' : `Download ${selected.length} stickers as ZIP`}</button></div>}
+    {message && <div className={message.includes('generated') || message.includes('recorded') ? 'profile-success' : 'auth-error'}>{message}</div>}
+    {loading ? <div className="admin-empty"><div className="loading-spinner" /></div> : items.length === 0 ? <div className="admin-empty"><BadgeCheck size={26} /><strong>No {status.toLowerCase()} stickers</strong><span>{status === 'READY' ? 'Choose a street above to generate the first batch.' : status === 'PRINTED' ? 'Downloaded stickers will appear here.' : 'Stickers appear here after residents use their codes.'}</span></div> : <div className="sticker-grid">
+      {items.map((sticker) => <article className={`sticker-record ${selected.includes(sticker.id) ? 'selected' : ''}`} key={sticker.id}>
+        <label className="sticker-select">{status !== 'CLAIMED' && <input type="checkbox" checked={selected.includes(sticker.id)} onChange={() => toggle(sticker.id)} />}<span>{sticker.code}</span></label>
+        <small>{sticker.street.name}{sticker.street.association?.name ? ` · ${sticker.street.association.name}` : ''}</small>
+        <div className="vehicle-sticker" ref={(node) => { stickerRefs.current[sticker.id] = node; }}>
+          <div className="sticker-code"><b>{sticker.code.split('-')[1]}</b><strong>{String(sticker.sequence).padStart(4, '0')}</strong></div>
+          <div className="sticker-qr"><QRCode value={`${window.location.origin}/?sticker=${encodeURIComponent(sticker.code)}`} size={112} bgColor="#ffffff" fgColor="#080808" /></div>
+          <span className="sticker-visible-code">{sticker.code}</span>
           <em>Bodija Value Card</em>
         </div>
-        <div className="sticker-record-foot"><span>{downloaded ? `Downloaded ${resident.stickerDownloadCount} time${resident.stickerDownloadCount === 1 ? '' : 's'}` : 'New sticker'}</span><button className="text-button" onClick={() => void exportStickers([resident.id])}>Download one</button></div>
+        <div className="sticker-record-foot"><span>{sticker.resident ? `Registered by ${sticker.resident.fullName || 'resident'}` : sticker.downloadedAt ? `Downloaded ${sticker.downloadCount} time${sticker.downloadCount === 1 ? '' : 's'}` : 'New · unused'}</span>{status !== 'CLAIMED' && <button className="text-button" onClick={() => void exportStickers([sticker.id])}>Download one</button>}</div>
       </article>)}
     </div>}
   </section>;

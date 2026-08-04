@@ -824,8 +824,7 @@ function ProfilePage({ resident, token, onProfileUpdated }: { resident: Resident
 
   // Detect whether the current changes will trigger re-approval
   const sensitiveFieldChanged =
-    form.fullName.trim() !== resident.fullName ||
-    form.neighbourhood.trim() !== resident.neighbourhood;
+    form.fullName.trim() !== resident.fullName;
   const willTriggerReApproval = sensitiveFieldChanged && resident.approvalStatus === 'APPROVED';
 
   const patch = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -913,11 +912,11 @@ function ProfilePage({ resident, token, onProfileUpdated }: { resident: Resident
             </div>
           </label>
           <label>
-            <span>Community cluster</span>
+            <span>Association (assigned by sticker)</span>
             <div className="auth-input">
               <input
                 value={form.neighbourhood}
-                onChange={event => setForm(current => ({ ...current, neighbourhood: event.target.value }))}
+                readOnly
               />
             </div>
           </label>
@@ -938,7 +937,7 @@ function ProfilePage({ resident, token, onProfileUpdated }: { resident: Resident
         <h3 style={{ marginTop: 18 }}>Household and address</h3>
         <div className="auth-field-row">
           <label><span>Inventory number</span><div className="auth-input"><input value={form.inventoryNumber} onChange={e => setForm(f => ({ ...f, inventoryNumber: e.target.value }))} /></div></label>
-          <label><span>Street name</span><div className="auth-input"><input value={form.streetName} onChange={e => setForm(f => ({ ...f, streetName: e.target.value }))} /></div></label>
+          <label><span>Street (assigned by sticker)</span><div className="auth-input"><input value={form.streetName} readOnly /></div></label>
         </div>
         <label><span>Residential address</span><div className="auth-input"><input value={form.residentialAddress} onChange={e => setForm(f => ({ ...f, residentialAddress: e.target.value }))} /></div></label>
         <div className="auth-field-row">
@@ -1399,9 +1398,9 @@ function ResidentPortal({ session, logout }: { session: AuthSession; logout: () 
   useEffect(() => {
     void loadDashboard();
     loadNotifications();
-    // Poll every 60 seconds for new notifications
-    const timer = setInterval(loadNotifications, 60_000);
-    return () => clearInterval(timer);
+    const notificationTimer = setInterval(loadNotifications, 60_000);
+    const approvalTimer = setInterval(loadDashboard, 30_000);
+    return () => { clearInterval(notificationTimer); clearInterval(approvalTimer); };
   }, [loadDashboard, loadNotifications]);
 
   const handleMarkRead = async (id: string) => {
@@ -1428,6 +1427,41 @@ function ResidentPortal({ session, logout }: { session: AuthSession; logout: () 
   const titles: Record<View, string> = { home: 'Overview', directory: 'Explore benefits', card: 'My value card', activity: 'Activity', profile: 'My profile', dependants: 'Dependants', support: 'Help and support' };
   const profileLocked = !resident.isProfileComplete;
   const activeView = profileLocked ? 'profile' : view;
+  const accessApproved = resident.approvalStatus === 'APPROVED' && resident.card?.status === 'ACTIVE';
+
+  if (!accessApproved) {
+    const gateTitle = !resident.isProfileComplete
+      ? 'Complete your resident profile'
+      : resident.approvalStatus === 'REJECTED'
+        ? 'Association confirmation was not approved'
+        : resident.approvalStatus === 'SUSPENDED'
+          ? 'Your resident access is suspended'
+          : 'Waiting for association confirmation';
+    const gateMessage = !resident.isProfileComplete
+      ? 'Your sticker has been accepted. Complete the required residence details below, then your association representative can review your application.'
+      : resident.approvalStatus === 'PENDING'
+        ? `Your profile is complete and has been sent to ${resident.neighbourhood || 'your association'}. Your Value Card and resident benefits will unlock only after their representative confirms it.`
+        : resident.statusReason || 'Contact your association representative or BERA support for assistance.';
+
+    return <div className="approval-gate-shell">
+      <header className="approval-gate-header"><Brand /><button className="secondary-button" onClick={logout}><LogOut size={17} /> Sign out</button></header>
+      <main className="approval-gate-main">
+        <section className="approval-gate-status">
+          <span className="approval-gate-icon">{resident.isProfileComplete ? <Clock3 size={27} /> : <UserRound size={27} />}</span>
+          <div><small>Sticker verified · {resident.streetName}</small><h1>{gateTitle}</h1><p>{gateMessage}</p></div>
+          <button className="outline-button" onClick={() => void loadDashboard()}><RefreshCw size={16} /> Check status</button>
+        </section>
+        <ProfilePage
+          resident={resident}
+          token={session.accessToken}
+          onProfileUpdated={nextResident => {
+            setResident(nextResident);
+            void loadDashboard();
+          }}
+        />
+      </main>
+    </div>;
+  }
 
   return (
     <div className="app-shell">

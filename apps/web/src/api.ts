@@ -217,11 +217,12 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
 }
 
 export function registerResident(input: {
+  stickerCode: string;
   fullName: string;
   phone: string;
   email?: string;
   password: string;
-  neighbourhood: string;
+  neighbourhood?: string;
   streetName?: string;
   memberCategory: string;
   registrationType: 'INDIVIDUAL' | 'FAMILY';
@@ -239,6 +240,16 @@ export function registerResident(input: {
     method: 'POST',
     body: JSON.stringify(input),
   });
+}
+
+export interface RegistrationSticker {
+  code: string;
+  streetName: string;
+  associationName: string;
+}
+
+export function getRegistrationSticker(code: string) {
+  return apiRequest<RegistrationSticker>(`/api/auth/resident/sticker/${encodeURIComponent(code)}`);
 }
 
 export interface ResidentDirectory {

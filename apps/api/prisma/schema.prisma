@@ -160,6 +160,7 @@ model Resident {
   cardHistory      CardHistory[]
   rewardLedger     RewardLedger[]
   visitorPasses    VisitorPass[]
+  streetSticker    StreetSticker?
 }
 
 model Association {
@@ -178,9 +179,33 @@ model AssociationStreet {
   associationId String?
   association   Association? @relation(fields: [associationId], references: [id])
   createdAt     DateTime    @default(now())
+  stickers      StreetSticker[]
 
   @@unique([name, associationId])
   @@index([associationId])
+}
+
+/// A physical sticker is issued before a resident account exists. Its visible
+/// code is a single-use registration credential and its QR opens registration
+/// with that same code pre-filled.
+model StreetSticker {
+  id            String            @id @default(cuid())
+  code          String            @unique
+  sequence      Int
+  streetId      String
+  street        AssociationStreet @relation(fields: [streetId], references: [id])
+  residentId    String?           @unique
+  resident      Resident?         @relation(fields: [residentId], references: [id], onDelete: SetNull)
+  downloadedAt  DateTime?
+  downloadCount Int               @default(0)
+  claimedAt     DateTime?
+  createdAt     DateTime          @default(now())
+  createdBy     String?
+
+  @@unique([streetId, sequence])
+  @@index([streetId])
+  @@index([downloadedAt])
+  @@index([claimedAt])
 }
 
 model Dependant {

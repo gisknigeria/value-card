@@ -12,6 +12,7 @@
     "@vitejs/plugin-react": "^4.6.0",
     "html2canvas": "^1.4.1",
     "jsqr": "^1.4.0",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.523.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

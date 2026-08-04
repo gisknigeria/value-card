@@ -66,6 +66,8 @@ The API runs at `http://localhost:4000/api`. Its health endpoint is
 
 ## Current pilot slice
 
+- Street-level sticker batch generation with one-time codes and registration QR links
+- Sticker-gated resident registration with street and association assigned by the issued sticker
 - Resident registration, password login, and JWT session recovery
 - Live digital QR cards with pending, active, expired, and suspended states
 - BERA administrator dashboard for resident search, approval, rejection, and suspension

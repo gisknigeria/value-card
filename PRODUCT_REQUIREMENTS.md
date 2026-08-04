@@ -89,6 +89,11 @@ Residents should be able to filter the comparison page by category and benefit t
 
 ### Resident Features
 
+- Sticker-first registration: the community generates and distributes physical stickers by street before accounts are created.
+- Each sticker has a visible, one-time registration code and a QR that opens registration with the code pre-filled.
+- A resident must use an unused sticker code; the system derives and locks the resident's street and association from that sticker.
+- Registration creates a restricted account only. The resident must complete the required residence profile and wait for their association representative to confirm it.
+- Until confirmation, the membership ID, card QR, benefits, activity, and other resident portal features remain locked.
 - Resident registration form.
 - Consent/privacy acknowledgement.
 - Admin verification flow.
@@ -113,6 +118,8 @@ Residents should be able to filter the comparison page by category and benefit t
 
 ### Admin Features
 
+- Generate numbered sticker batches for a selected street and track ready, printed, and registered stickers.
+- Download any selected batch (for example 20 or 50 stickers) as one ZIP containing individual print-ready PNGs and a CSV manifest.
 - Resident approval and suspension.
 - Merchant approval and suspension.
 - Discount/offer approval.
@@ -186,4 +193,3 @@ Residents should be able to filter the comparison page by category and benefit t
 - Merchant reward balances should not be treated as cash.
 - BERA/admin approval is required before merchant offer changes go live.
 - The platform should be mobile-friendly because merchants and residents will likely use phones.
-

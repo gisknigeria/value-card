@@ -105,6 +105,25 @@ export class AuthService {
     return { associations, unassignedStreets };
   }
 
+  async getRegistrationSticker(rawCode: string) {
+    const code = this.normalizeStickerCode(rawCode);
+    const sticker = await this.prisma.streetSticker.findUnique({
+      where: { code },
+      select: {
+        code: true,
+        residentId: true,
+        street: { select: { name: true, association: { select: { name: true } } } },
+      },
+    });
+    if (!sticker) throw new BadRequestException('Sticker code not found. Check the code printed on your sticker.');
+    if (sticker.residentId) throw new ConflictException('This sticker code has already been used to register an account.');
+    return {
+      code: sticker.code,
+      streetName: sticker.street.name,
+      associationName: sticker.street.association?.name || '',
+    };
+  }
+
   async registerResident(input: RegisterResidentDto) {
     if (!input.consent) {
       throw new BadRequestException('Consent is required to create a resident account');
@@ -113,67 +132,73 @@ export class AuthService {
       throw new BadRequestException('Add at least one family member for family registration');
     }
 
+    const stickerCode = this.normalizeStickerCode(input.stickerCode);
     const phone = input.phone.replace(/[\s-]/g, '');
     const email = input.email?.trim().toLowerCase() || null;
     const passwordHash = await bcrypt.hash(input.password, 12);
-    const matchedStreet = input.streetName?.trim()
-      ? await this.prisma.associationStreet.findFirst({
-          where: {
-            name: { equals: input.streetName.trim(), mode: 'insensitive' },
-            ...(input.neighbourhood?.trim()
-              ? { association: { name: { equals: input.neighbourhood.trim(), mode: 'insensitive' } } }
-              : {}),
-          },
-          include: { association: true },
-        })
-      : null;
-    const associationName = matchedStreet?.association?.name || input.neighbourhood?.trim() || '';
+    const membershipId = await this.createMembershipId();
 
     try {
-      const user = await this.prisma.user.create({
-        data: {
-          phone,
-          email,
-          passwordHash,
-          role: UserRole.RESIDENT,
-          accessCard: {
-            create: {
-              cardNumber: `BVC-RES-${randomBytes(6).toString('hex').toUpperCase()}`,
-              qrToken: `BVC-ACCESS-${randomBytes(24).toString('base64url')}`,
-            },
-          },
-          resident: {
-            create: {
-              fullName: input.fullName?.trim() || '',
-              neighbourhood: associationName,
-              streetName: matchedStreet?.name || input.streetName?.trim() || null,
-              memberCategory: input.memberCategory?.trim() || 'Resident member',
-              registrationType: input.registrationType,
-              householdRole: input.householdRole,
-              consentedAt: new Date(),
-              card: {
-                create: {
-                  membershipId: await this.createMembershipId(),
-                  qrToken: `BVC-${randomBytes(24).toString('base64url')}`,
-                },
+      const user = await this.prisma.$transaction(async (tx) => {
+        const sticker = await tx.streetSticker.findUnique({
+          where: { code: stickerCode },
+          include: { street: { include: { association: true } } },
+        });
+        if (!sticker) throw new BadRequestException('Sticker code not found. Check the code printed on your sticker.');
+        if (sticker.residentId) throw new ConflictException('This sticker code has already been used to register an account.');
+
+        const created = await tx.user.create({
+          data: {
+            phone,
+            email,
+            passwordHash,
+            role: UserRole.RESIDENT,
+            accessCard: {
+              create: {
+                cardNumber: `BVC-RES-${randomBytes(6).toString('hex').toUpperCase()}`,
+                qrToken: `BVC-ACCESS-${randomBytes(24).toString('base64url')}`,
               },
-              dependants: input.registrationType === 'FAMILY' && input.familyMembers?.length
-                ? {
-                    create: input.familyMembers.map(member => ({
-                      fullName: member.fullName.trim(),
-                      relationship: member.relationship.trim(),
-                      phone: member.phone?.replace(/[\s-]/g, '') || null,
-                      dateOfBirth: member.dateOfBirth ? new Date(member.dateOfBirth) : null,
-                      isMinor: member.isMinor,
-                      membershipId: `BVC-FAM-${randomBytes(6).toString('hex').toUpperCase()}`,
-                      qrToken: `BVC-FAMILY-${randomBytes(24).toString('base64url')}`,
-                    })),
-                  }
-                : undefined,
+            },
+            resident: {
+              create: {
+                fullName: input.fullName?.trim() || '',
+                neighbourhood: sticker.street.association?.name || '',
+                streetName: sticker.street.name,
+                memberCategory: input.memberCategory?.trim() || 'Resident member',
+                registrationType: input.registrationType,
+                householdRole: input.householdRole,
+                consentedAt: new Date(),
+                card: {
+                  create: {
+                    membershipId,
+                    qrToken: `BVC-${randomBytes(24).toString('base64url')}`,
+                  },
+                },
+                dependants: input.registrationType === 'FAMILY' && input.familyMembers?.length
+                  ? {
+                      create: input.familyMembers.map(member => ({
+                        fullName: member.fullName.trim(),
+                        relationship: member.relationship.trim(),
+                        phone: member.phone?.replace(/[\s-]/g, '') || null,
+                        dateOfBirth: member.dateOfBirth ? new Date(member.dateOfBirth) : null,
+                        isMinor: member.isMinor,
+                        membershipId: `BVC-FAM-${randomBytes(6).toString('hex').toUpperCase()}`,
+                        qrToken: `BVC-FAMILY-${randomBytes(24).toString('base64url')}`,
+                      })),
+                    }
+                  : undefined,
+              },
             },
           },
-        },
-        include: { resident: { select: residentSelect } },
+          include: { resident: { select: residentSelect } },
+        });
+
+        const claim = await tx.streetSticker.updateMany({
+          where: { id: sticker.id, residentId: null },
+          data: { residentId: created.resident!.id, claimedAt: new Date() },
+        });
+        if (claim.count !== 1) throw new ConflictException('This sticker was just used by another registration.');
+        return created;
       });
 
       return this.createSession(user.id, user.role, this.withProfileStatus(user.resident!));
@@ -183,6 +208,10 @@ export class AuthService {
       }
       throw error;
     }
+  }
+
+  private normalizeStickerCode(value: string) {
+    return value.trim().toUpperCase().replace(/[\s_]+/g, '-').replace(/-+/g, '-');
   }
 
   async login(input: LoginDto) {
@@ -293,8 +322,7 @@ export class AuthService {
 
     // Sensitive fields whose change requires re-approval by BERA
     const sensitiveFieldChanged =
-      (input.fullName && input.fullName.trim() !== resident.fullName) ||
-      (input.neighbourhood && input.neighbourhood.trim() !== resident.neighbourhood);
+      Boolean(input.fullName && input.fullName.trim() !== resident.fullName);
 
     const wasApproved = resident.approvalStatus === 'APPROVED';
     const requiresReApproval = sensitiveFieldChanged && wasApproved;
@@ -311,11 +339,13 @@ export class AuthService {
 
         const residentData: Prisma.ResidentUpdateInput = {
           fullName: input.fullName?.trim() || resident.fullName,
-          neighbourhood: input.neighbourhood?.trim() || resident.neighbourhood,
+          // Street and association are issued by the physical sticker and
+          // cannot be reassigned from the resident profile form.
+          neighbourhood: resident.neighbourhood,
           memberCategory: input.memberCategory?.trim() || resident.memberCategory,
           registrationType: input.registrationType ?? resident.registrationType,
           householdRole: input.householdRole ?? resident.householdRole,
-          streetName: input.streetName?.trim() || resident.streetName,
+          streetName: resident.streetName,
           inventoryNumber: input.inventoryNumber?.trim() || null,
           residentialAddress: input.residentialAddress?.trim() || null,
           residencyType: input.residencyType?.trim() || null,
@@ -401,6 +431,11 @@ export class AuthService {
         id: true,
         fullName: true,
         neighbourhood: true,
+        streetName: true,
+        residentialAddress: true,
+        residencyType: true,
+        householdSize: true,
+        householdRole: true,
         memberCategory: true,
         approvalStatus: true,
         statusReason: true,
@@ -440,6 +475,18 @@ export class AuthService {
 
     if (!resident) {
       throw new UnauthorizedException('Resident account is unavailable');
+    }
+
+    if (resident.approvalStatus !== 'APPROVED') {
+      return {
+        resident: this.withProfileStatus(resident),
+        metrics: { savedThisMonth: 0, rewardBalance: 0, availableOffers: 0, categories: 0 },
+        recentActivity: [],
+        offers: [],
+        rewardBalances: [],
+        complaintsCount: 0,
+        totalSaved: 0,
+      };
     }
 
     const [offers, transactions, complaintCount] = await Promise.all([
@@ -804,10 +851,10 @@ export class AuthService {
     return `VP${randomBytes(3).toString('hex').toUpperCase()}`;
   }
 
-  private createSession(
+  private createSession<T extends object>(
     userId: string,
     role: UserRole,
-    resident: Prisma.ResidentGetPayload<{ select: typeof residentSelect }> & { isProfileComplete?: boolean },
+    resident: T,
   ) {
     return {
       accessToken: this.jwt.sign({ sub: userId, role }),
@@ -815,11 +862,27 @@ export class AuthService {
     };
   }
 
-  private withProfileStatus<T extends { fullName: string; neighbourhood: string; memberCategory: string; user: { phone: string }; dependants?: { fullName: string; relationship: string }[] }>(
+  private withProfileStatus<T extends {
+    fullName: string;
+    neighbourhood: string;
+    streetName: string | null;
+    residentialAddress: string | null;
+    residencyType: string | null;
+    householdSize: number | null;
+    householdRole: string | null;
+    memberCategory: string;
+    approvalStatus: string;
+    card?: unknown;
+    user: { phone: string };
+    dependants?: { fullName: string; relationship: string }[];
+  }>(
     resident: T,
   ) {
     return {
       ...resident,
+      // A pending resident has an internal pending card record, but the card
+      // identity and QR must not leave the API until association approval.
+      card: resident.approvalStatus === 'APPROVED' ? resident.card ?? null : null,
       isProfileComplete: this.isResidentProfileComplete(resident),
     };
   }
@@ -827,6 +890,11 @@ export class AuthService {
   private isResidentProfileComplete(resident: {
     fullName: string;
     neighbourhood: string;
+    streetName: string | null;
+    residentialAddress: string | null;
+    residencyType: string | null;
+    householdSize: number | null;
+    householdRole: string | null;
     memberCategory: string;
     user: { phone: string };
     dependants?: { fullName: string; relationship: string }[];
@@ -834,9 +902,13 @@ export class AuthService {
     const primaryComplete = [
       resident.fullName,
       resident.neighbourhood,
+      resident.streetName,
+      resident.residentialAddress,
+      resident.residencyType,
+      resident.householdRole,
       resident.memberCategory,
       resident.user.phone,
-    ].every(value => Boolean(value?.trim()));
+    ].every(value => Boolean(value?.trim())) && Boolean(resident.householdSize && resident.householdSize > 0);
 
     const dependantsComplete = (resident.dependants ?? []).every(dependant =>
       Boolean(dependant.fullName?.trim()) && Boolean(dependant.relationship?.trim()),

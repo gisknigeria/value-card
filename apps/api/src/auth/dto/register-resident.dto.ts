@@ -20,6 +20,12 @@ class RegisterFamilyMemberDto {
 }
 
 export class RegisterResidentDto {
+  @IsString()
+  @Matches(/^BVC-[A-Z0-9-]+$/i, {
+    message: 'stickerCode must be the code printed on a valid community sticker',
+  })
+  stickerCode!: string;
+
   @IsOptional()
   @IsString()
   fullName?: string;

@@ -18,6 +18,11 @@ export class AuthController {
     return this.auth.getResidentDirectory();
   }
 
+  @Get('resident/sticker/:code')
+  registrationSticker(@Param('code') code: string) {
+    return this.auth.getRegistrationSticker(code);
+  }
+
   @Post('resident/register')
   registerResident(@Body() input: RegisterResidentDto) {
     return this.auth.registerResident(input);

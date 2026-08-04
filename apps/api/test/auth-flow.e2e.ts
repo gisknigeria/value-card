@@ -32,19 +32,31 @@ async function main() {
   const baseUrl = `http://127.0.0.1:${address.port}`;
   const prisma = app.get(PrismaService);
   const suffix = Date.now().toString().slice(-9);
+  const stickerCode = `BVC-TST-E2E-${suffix}`;
   let userId: string | undefined;
+  let stickerId: string | undefined;
+  let pendingCardToken: string | undefined;
   let summary: JsonObject | undefined;
 
   try {
+    const testStreet = await prisma.associationStreet.findFirst({ orderBy: { createdAt: 'asc' } });
+    if (!testStreet) throw new Error('Seed at least one association street before running the auth flow test');
+    const sticker = await prisma.streetSticker.create({
+      data: { code: stickerCode, sequence: Number(suffix), streetId: testStreet.id },
+    });
+    stickerId = sticker.id;
+
     const registration = await jsonRequest(`${baseUrl}/api/auth/resident/register`, {
       method: 'POST',
       body: JSON.stringify({
+        stickerCode,
         fullName: 'Bodija Registration Test',
         phone: `080${suffix}`,
         email: `resident-test-${suffix}@example.com`,
         password: 'secure-test-password',
-        neighbourhood: 'New Bodija',
         memberCategory: 'Resident member',
+        registrationType: 'INDIVIDUAL',
+        householdRole: 'TENANT',
         consent: true,
       }),
     });
@@ -53,12 +65,19 @@ async function main() {
       .findUniqueOrThrow({ where: { phone: `080${suffix}` }, select: { id: true } })
       .then(user => user.id);
 
+    const internalResident = await prisma.resident.findUniqueOrThrow({
+      where: { userId },
+      select: { card: { select: { qrToken: true, status: true } } },
+    });
+    pendingCardToken = internalResident.card?.qrToken;
+
     if (
       !registration.accessToken ||
-      registration.resident.card.status !== 'PENDING_VERIFICATION' ||
-      !registration.resident.card.qrToken
+      registration.resident.card !== null ||
+      internalResident.card?.status !== 'PENDING_VERIFICATION' ||
+      !pendingCardToken
     ) {
-      throw new Error('Registration did not issue the expected pending digital card');
+      throw new Error('Registration did not keep the pending digital card hidden until approval');
     }
 
     const login = await jsonRequest(`${baseUrl}/api/auth/resident/login`, {
@@ -112,7 +131,7 @@ async function main() {
         Authorization: `Bearer ${securityLogin.token}`,
       },
       body: JSON.stringify({
-        token: registration.resident.card.qrToken,
+        token: pendingCardToken,
         direction: 'ENTRY',
         gate: 'Main Gate',
       }),
@@ -151,7 +170,7 @@ async function main() {
         Authorization: `Bearer ${securityLogin.token}`,
       },
       body: JSON.stringify({
-        token: registration.resident.card.qrToken,
+        token: pendingCardToken,
         direction: 'ENTRY',
         gate: 'Main Gate',
       }),
@@ -183,6 +202,7 @@ async function main() {
         ]);
       }
     }
+    if (stickerId) await prisma.streetSticker.deleteMany({ where: { id: stickerId } });
     await app.close();
   }
 

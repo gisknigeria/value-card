@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { AdminRole, ApprovalStatus, ComplaintStatus, UserRole } from '@prisma/client';
 import type { Request } from 'express';
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
@@ -46,7 +46,17 @@ class UpdateUserPositionDto {
 
 class StickerExportDto {
   @IsString({ each: true })
-  residentIds!: string[];
+  stickerIds!: string[];
+}
+
+class GenerateStickersDto {
+  @IsString()
+  streetId!: string;
+
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  quantity!: number;
 }
 
 @Controller('admin')
@@ -79,9 +89,19 @@ export class AdminController {
     return this.admin.updateResidentStatus(id, input.status, req.user.userId, input.reason);
   }
 
+  @Get('sticker-streets')
+  stickerStreets(@Req() req: AuthRequest) {
+    return this.admin.stickerStreets(req.user.userId);
+  }
+
   @Get('stickers')
-  stickers(@Req() req: AuthRequest, @Query('downloaded') downloaded?: string) {
-    return this.admin.stickers(downloaded === 'true', req.user.userId);
+  stickers(@Req() req: AuthRequest, @Query('status') status?: string) {
+    return this.admin.stickers(status, req.user.userId);
+  }
+
+  @Post('stickers/generate')
+  generateStickers(@Req() req: AuthRequest, @Body() input: GenerateStickersDto) {
+    return this.admin.generateStickers(input.streetId, input.quantity, req.user.userId);
   }
 
   @Get('cards')
@@ -91,7 +111,7 @@ export class AdminController {
 
   @Post('stickers/export')
   exportStickers(@Req() req: AuthRequest, @Body() input: StickerExportDto) {
-    return this.admin.markStickersExported(input.residentIds, req.user.userId);
+    return this.admin.markStickersExported(input.stickerIds, req.user.userId);
   }
 
   @Get('users')
