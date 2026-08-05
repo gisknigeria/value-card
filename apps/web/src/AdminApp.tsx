@@ -1483,9 +1483,10 @@ function StickerExportsPanel({ token }: { token: string }) {
         <small>{sticker.street.name}{sticker.street.association?.name ? ` · ${sticker.street.association.name}` : ''}</small>
         <div className="vehicle-sticker" ref={(node) => { stickerRefs.current[sticker.id] = node; }}>
           <div className="sticker-code"><b>{sticker.code.split('-')[1]}</b><strong>{String(sticker.sequence).padStart(4, '0')}</strong></div>
-          <div className="sticker-qr"><QRCode value={`${window.location.origin}/?sticker=${encodeURIComponent(sticker.code)}`} size={112} bgColor="#ffffff" fgColor="#080808" /></div>
-          <span className="sticker-visible-code">{sticker.code}</span>
-          <em>Bodija Value Card</em>
+          <div className="sticker-qr">
+            <QRCode value={`${window.location.origin}/?sticker=${encodeURIComponent(sticker.code)}`} size={112} bgColor="#ffffff" fgColor="#080808" />
+            <span className="sticker-visible-code">{sticker.code}</span>
+          </div>
         </div>
         <div className="sticker-record-foot"><span>{sticker.resident ? `Registered by ${sticker.resident.fullName || 'resident'}` : sticker.downloadedAt ? `Downloaded ${sticker.downloadCount} time${sticker.downloadCount === 1 ? '' : 's'}` : 'New · unused'}</span>{status !== 'CLAIMED' && <button className="text-button" onClick={() => void exportStickers([sticker.id])}>Download one</button>}</div>
       </article>)}
