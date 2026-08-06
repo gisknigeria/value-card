@@ -12,6 +12,8 @@ import {
 } from "react-icons/md";
 import { FaVideo, FaVideoSlash } from "react-icons/fa";
 import { io } from "socket.io-client";
+import WalkieReceiver from "./WalkieReceiver.jsx";
+import "./walkie.css";
 
 const API = "/api";
 const SCAN_COOLDOWN = 3000;
@@ -67,6 +69,7 @@ export default function AccessPointApp({ session, onLogout }) {
 
   // GPS auto-share
   const socketRef = useRef(null);
+  const [walkieSocket, setWalkieSocket] = useState(null);
   const gpsRef = useRef(null);
   const lastGpsRef = useRef(0);
   const [gpsActive, setGpsActive] = useState(false);
@@ -95,6 +98,7 @@ export default function AccessPointApp({ session, onLogout }) {
       auth: { token: session.token },
     });
     socketRef.current = socket;
+    setWalkieSocket(socket);
     socket.on("connect", () => {
       socket.emit("camera:register", {
         userId: session.user.id, name: session.user.name,
@@ -108,6 +112,7 @@ export default function AccessPointApp({ session, onLogout }) {
     startGps(socket);
     return () => {
       stopGps();
+      setWalkieSocket(null);
       socket.disconnect();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -216,6 +221,7 @@ export default function AccessPointApp({ session, onLogout }) {
         <button className="ap-location-retry" onClick={() => { stopGps(); startGps(socketRef.current); }}>Retry live location</button>
         <button className="ap-location-signout" onClick={onLogout}>Sign out</button>
       </div>
+      <WalkieReceiver socket={walkieSocket} userName={session.user.name} />
     </div>;
   }
 
@@ -277,6 +283,7 @@ export default function AccessPointApp({ session, onLogout }) {
         {tab === "exit"    && <ExitTab    gate={gate} headers={headers} isOnline={isOnline} onExited={loadHistory} />}
         {tab === "history" && <HistoryTab events={events} onRefresh={loadHistory} decisionClass={decisionClass} />}
       </div>
+      <WalkieReceiver socket={walkieSocket} userName={session.user.name} />
     </div>
   );
 }

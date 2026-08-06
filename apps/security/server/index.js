@@ -436,6 +436,26 @@ const server = createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 const activeCameraShares = new Map();
 const accessPointGps = new Map();
+const walkieState = { controlSocketId: null, floor: null, floorTimer: null };
+
+const walkieFloorPayload = () => walkieState.floor
+  ? { active: true, socketId: walkieState.floor.socketId, name: walkieState.floor.name, startedAt: walkieState.floor.startedAt }
+  : { active: false };
+
+function broadcastWalkieFloor() {
+  const payload = walkieFloorPayload();
+  io.to('walkie:control').emit('walkie:floor', payload);
+  io.to('walkie:field').emit('walkie:floor', payload);
+}
+
+function releaseWalkieFloor(socketId) {
+  if (!walkieState.floor || (socketId && walkieState.floor.socketId !== socketId)) return false;
+  clearTimeout(walkieState.floorTimer);
+  walkieState.floorTimer = null;
+  walkieState.floor = null;
+  broadcastWalkieFloor();
+  return true;
+}
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
 const auth = (req, res, next) => { try { req.user = jwt.verify((req.headers.authorization || '').replace('Bearer ', ''), secret); next(); } catch { res.status(401).json({ message: 'Session expired. Please sign in again.' }); } };
@@ -1358,6 +1378,88 @@ io.on('connection', socket => {
       activeCameraShares.delete(camUser.userId);
       socket.broadcast.emit('camera:share:stop', { userId: camUser.userId });
     }
+    leaveWalkie();
+  });
+
+  // Analogue radio gateway: one authenticated control room and one PTT speaker at a time.
+  function leaveWalkie() {
+    if (socket.data.walkieRole === 'control' && walkieState.controlSocketId === socket.id) {
+      walkieState.controlSocketId = null;
+      releaseWalkieFloor();
+      io.to('walkie:field').emit('walkie:control:offline');
+    } else if (socket.data.walkieRole === 'field') {
+      releaseWalkieFloor(socket.id);
+      io.to('walkie:control').emit('walkie:peer:left', { socketId: socket.id });
+    }
+    socket.leave('walkie:control');
+    socket.leave('walkie:field');
+    socket.data.walkieRole = null;
+  }
+
+  socket.on('walkie:join', async ({ role, name } = {}, acknowledge = () => {}) => {
+    if (!['control', 'field'].includes(role)) return acknowledge({ ok: false, message: 'Invalid radio role.' });
+    if (role === 'control' && !['Admin', 'Super Admin'].includes(user?.role)) {
+      return acknowledge({ ok: false, message: 'Only control-room administrators can start the radio gateway.' });
+    }
+    if (socket.data.walkieRole && socket.data.walkieRole !== role) leaveWalkie();
+    socket.data.walkieName = String(user?.name || name || 'Security officer').slice(0, 80);
+    socket.data.walkieRole = role;
+
+    if (role === 'control') {
+      const existing = walkieState.controlSocketId && io.sockets.sockets.get(walkieState.controlSocketId);
+      if (existing && existing.id !== socket.id) {
+        socket.data.walkieRole = null;
+        return acknowledge({ ok: false, message: 'Another control-room radio gateway is already live.' });
+      }
+      walkieState.controlSocketId = socket.id;
+      socket.join('walkie:control');
+      const fieldSockets = await io.in('walkie:field').fetchSockets();
+      const peers = fieldSockets.map(peer => ({ socketId: peer.id, name: peer.data.walkieName || 'Security officer' }));
+      io.to('walkie:field').emit('walkie:control:online', { socketId: socket.id, name: socket.data.walkieName });
+      return acknowledge({ ok: true, peers, floor: walkieState.floor });
+    }
+
+    socket.join('walkie:field');
+    io.to('walkie:control').emit('walkie:peer:joined', { socketId: socket.id, name: socket.data.walkieName });
+    const controlSocket = walkieState.controlSocketId && io.sockets.sockets.get(walkieState.controlSocketId);
+    acknowledge({
+      ok: true,
+      control: controlSocket ? { socketId: controlSocket.id, name: controlSocket.data.walkieName || 'Control Room' } : null,
+      floor: walkieState.floor,
+    });
+  });
+
+  socket.on('walkie:leave', leaveWalkie);
+
+  socket.on('walkie:floor:request', (_, acknowledge = () => {}) => {
+    if (socket.data.walkieRole !== 'field') return acknowledge({ granted: false, message: 'Join the security radio first.' });
+    if (!walkieState.controlSocketId || !io.sockets.sockets.has(walkieState.controlSocketId)) {
+      return acknowledge({ granted: false, message: 'The control-room radio is offline.' });
+    }
+    if (walkieState.floor && walkieState.floor.socketId !== socket.id) {
+      return acknowledge({ granted: false, message: `${walkieState.floor.name} is already transmitting.` });
+    }
+    walkieState.floor = { socketId: socket.id, name: socket.data.walkieName, startedAt: new Date().toISOString() };
+    clearTimeout(walkieState.floorTimer);
+    walkieState.floorTimer = setTimeout(() => releaseWalkieFloor(socket.id), 45000);
+    broadcastWalkieFloor();
+    acknowledge({ granted: true, controlSocketId: walkieState.controlSocketId });
+  });
+
+  socket.on('walkie:floor:release', () => releaseWalkieFloor(socket.id));
+
+  socket.on('walkie:signal', ({ target, link, sdp, candidate } = {}) => {
+    if (!target || !['radio', 'talkback'].includes(link) || (!sdp && !candidate)) return;
+    const targetSocket = io.sockets.sockets.get(target);
+    if (!targetSocket) return;
+    const fromRole = socket.data.walkieRole;
+    const toRole = targetSocket.data.walkieRole;
+    const permitted = link === 'radio'
+      ? (fromRole === 'control' && toRole === 'field') || (fromRole === 'field' && toRole === 'control')
+      : (fromRole === 'field' && toRole === 'control') || (fromRole === 'control' && toRole === 'field');
+    if (!permitted) return;
+    if (link === 'talkback' && fromRole === 'field' && walkieState.floor?.socketId !== socket.id) return;
+    io.to(target).emit('walkie:signal', { from: socket.id, link, sdp, candidate });
   });
 });
 

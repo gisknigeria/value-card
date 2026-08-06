@@ -5,7 +5,10 @@ import { io } from "socket.io-client";
 import Hls from "hls.js";
 import shp from "shpjs";
 import AccessScanner from "./AccessScanner.jsx";
+import WalkieTalkie from "./WalkieTalkie.jsx";
+import WalkieReceiver from "./WalkieReceiver.jsx";
 import "./resident-search.css";
+import "./walkie.css";
 import {
   FaBullseye,
   FaCamera,
@@ -3756,6 +3759,7 @@ function Dashboard({ session, onLogout }) {
   );
   const mapRef = useRef(null);
   const socketRef = useRef(null);
+  const [walkieSocket, setWalkieSocket] = useState(null);
   const gpsWatchRef = useRef(null);
   const gpsBestRef = useRef(null);
   const localCameraStreamRef = useRef(null);
@@ -3856,8 +3860,10 @@ function Dashboard({ session, onLogout }) {
       transports: ["polling", "websocket"],
       reconnectionAttempts: 10,
       timeout: 15000,
+      auth: { token: session.token },
     });
     socketRef.current = socket;
+    setWalkieSocket(socket);
     socket.on("connect_error", () => {
       // Silently handle reconnection — no toast shown to security officers
     });
@@ -4075,6 +4081,7 @@ function Dashboard({ session, onLogout }) {
       Object.values(rtcPeersRef.current).forEach((pc) => pc.close());
       socket.close();
       socketRef.current = null;
+      setWalkieSocket(null);
     };
   }, []);
   const visible = incidents.filter(
@@ -6226,6 +6233,9 @@ function Dashboard({ session, onLogout }) {
         />
       )}
       {/* Toast — only shown for errors and emergency alerts */}
+      {canAdmin
+        ? <WalkieTalkie socket={walkieSocket} userName={session.user.name || "Control Room"} />
+        : <WalkieReceiver socket={walkieSocket} userName={session.user.name || "Officer"} />}
       {notice && <div className="toast">{notice}</div>}
     </main>
   );
