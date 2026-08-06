@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MdGraphicEq, MdRadio, MdRefresh, MdSignalWifi4Bar, MdSignalWifiOff, MdVolumeUp } from "react-icons/md";
+import { MdClose, MdGraphicEq, MdRadio, MdRefresh, MdSignalWifi4Bar, MdSignalWifiOff, MdVolumeUp } from "react-icons/md";
 import { WALKIE_RTC_CONFIG } from "./walkieRtc.js";
 
 const RAW_AUDIO = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 };
 
-export default function WalkieTalkie({ socket, userName = "Control Room" }) {
+export default function WalkieTalkie({ socket, userName = "Control Room", onClose }) {
   const [online, setOnline] = useState(false);
   const [peers, setPeers] = useState([]);
   const [floor, setFloor] = useState(null);
@@ -199,6 +199,7 @@ export default function WalkieTalkie({ socket, userName = "Control Room" }) {
   useEffect(() => () => goOffline(), [goOffline]);
 
   return <section className={`walkie-panel walkie-control ${minimised ? "minimised" : ""}`}>
+    {onClose && <button className="walkie-modal-close" type="button" onClick={onClose} aria-label="Close radio gateway"><MdClose /></button>}
     <button className="walkie-header" type="button" onClick={() => setMinimised((value) => !value)}>
       <MdRadio size={20} /><span><strong>Analogue radio gateway</strong><small>Control room</small></span>
       <em className={`walkie-status ${online ? "online" : ""}`}>{online ? <><MdSignalWifi4Bar /> Live</> : <><MdSignalWifiOff /> Offline</>}</em>

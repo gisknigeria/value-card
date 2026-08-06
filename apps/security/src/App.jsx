@@ -5868,7 +5868,7 @@ function Dashboard({ session, onLogout }) {
             </button>
             {canAdmin && (
               <button
-                className={`map-action ${radioPanelOpen ? "active" : ""}`}
+                className={`map-action radio-action ${radioPanelOpen ? "active" : ""}`}
                 onClick={() => setRadioPanelOpen((value) => !value)}
                 title={radioPanelOpen ? "Close radio gateway" : "Open radio gateway"}
                 aria-label={radioPanelOpen ? "Close radio gateway" : "Open radio gateway"}
@@ -6246,8 +6246,21 @@ function Dashboard({ session, onLogout }) {
       )}
       {/* Toast — only shown for errors and emergency alerts */}
       {canAdmin
-        ? <div className={radioPanelOpen ? "" : "walkie-admin-hidden"}>
-            <WalkieTalkie socket={walkieSocket} userName={session.user.name || "Control Room"} />
+        ? <div
+            className={`walkie-admin-modal ${radioPanelOpen ? "open" : ""}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Analogue radio gateway"
+            aria-hidden={!radioPanelOpen}
+            onClick={() => setRadioPanelOpen(false)}
+          >
+            <div className="walkie-admin-modal-content" onClick={(event) => event.stopPropagation()}>
+              <WalkieTalkie
+                socket={walkieSocket}
+                userName={session.user.name || "Control Room"}
+                onClose={() => setRadioPanelOpen(false)}
+              />
+            </div>
           </div>
         : <WalkieReceiver socket={walkieSocket} userName={session.user.name || "Officer"} />}
       {notice && <div className="toast">{notice}</div>}
