@@ -3748,6 +3748,7 @@ function Dashboard({ session, onLogout }) {
   const [operationsOpen, setOperationsOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [chatPanel, setChatPanel] = useState(false);
+  const [radioPanelOpen, setRadioPanelOpen] = useState(false);
   const [chatRooms, setChatRooms] = useState([]);
   const [activeRoom, setActiveRoom] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
@@ -5867,6 +5868,17 @@ function Dashboard({ session, onLogout }) {
             </button>
             {canAdmin && (
               <button
+                className={`map-action ${radioPanelOpen ? "active" : ""}`}
+                onClick={() => setRadioPanelOpen((value) => !value)}
+                title={radioPanelOpen ? "Close radio gateway" : "Open radio gateway"}
+                aria-label={radioPanelOpen ? "Close radio gateway" : "Open radio gateway"}
+                aria-pressed={radioPanelOpen}
+              >
+                <MdOutlineRadio />
+              </button>
+            )}
+            {canAdmin && (
+              <button
                 className="map-action"
                 onClick={() => {
                   setAnalyticsOpen(true);
@@ -6234,7 +6246,9 @@ function Dashboard({ session, onLogout }) {
       )}
       {/* Toast — only shown for errors and emergency alerts */}
       {canAdmin
-        ? <WalkieTalkie socket={walkieSocket} userName={session.user.name || "Control Room"} />
+        ? <div className={radioPanelOpen ? "" : "walkie-admin-hidden"}>
+            <WalkieTalkie socket={walkieSocket} userName={session.user.name || "Control Room"} />
+          </div>
         : <WalkieReceiver socket={walkieSocket} userName={session.user.name || "Officer"} />}
       {notice && <div className="toast">{notice}</div>}
     </main>

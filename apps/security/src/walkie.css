@@ -20,6 +20,7 @@
   box-shadow: 0 14px 42px rgba(15, 35, 48, .2);
 }
 .walkie-control.minimised { width: 275px; }
+.walkie-admin-hidden { display: none; }
 
 .walkie-header {
   display: flex;
