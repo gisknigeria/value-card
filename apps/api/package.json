@@ -11,7 +11,9 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-    "prisma:seed": "tsx prisma/seed.ts"
+    "prisma:seed": "node prisma/seed-accounts.js",
+    "prisma:reset-accounts": "tsx prisma/reset-accounts.ts",
+    "prisma:sync-streets": "tsx prisma/sync-street-codes.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.3",

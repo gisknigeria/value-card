@@ -21,6 +21,6 @@ export class InviteStaffDto {
   password!: string;
 
   @IsOptional()
-  @IsIn(['OWNER', 'STAFF'])
-  role?: 'OWNER' | 'STAFF';
+  @IsIn(['OWNER', 'STAFF', 'POS'])
+  role?: 'OWNER' | 'STAFF' | 'POS';
 }

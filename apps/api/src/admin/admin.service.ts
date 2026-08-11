@@ -1,5 +1,7 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { AdminRole, ApprovalStatus, CardStatus, ComplaintStatus, Prisma, UserRole } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
+import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateResidentStatusDto } from './dto/update-resident-status.dto';
 
@@ -72,6 +74,7 @@ export class AdminService {
       select: {
         id: true,
         name: true,
+        code: true,
         association: { select: { name: true } },
         _count: { select: { stickers: true } },
       },
@@ -96,7 +99,7 @@ export class AdminService {
         downloadedAt: true,
         downloadCount: true,
         claimedAt: true,
-        street: { select: { id: true, name: true, association: { select: { name: true } } } },
+        street: { select: { id: true, name: true, code: true, association: { select: { name: true } } } },
         resident: { select: { id: true, fullName: true } },
       },
       orderBy: [{ street: { name: 'asc' } }, { sequence: 'asc' }],
@@ -107,23 +110,22 @@ export class AdminService {
     const streetScope = await this.stickerStreetScope(adminUserId);
     const street = await this.prisma.associationStreet.findFirst({
       where: { id: streetId, ...streetScope },
-      select: { id: true, name: true },
+      select: { id: true, name: true, code: true },
     });
     if (!street) throw new NotFoundException('Street not found or outside your association');
+    if (!street.code) throw new BadRequestException('This street does not have an identification code');
 
     const aggregate = await this.prisma.streetSticker.aggregate({
       where: { streetId },
       _max: { sequence: true },
     });
     const firstSequence = (aggregate._max.sequence || 0) + 1;
-    const letters = street.name.replace(/[^a-z0-9]/gi, '').slice(0, 3).toUpperCase().padEnd(3, 'X');
-    const streetKey = street.id.replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase().padStart(4, 'X');
     const data = Array.from({ length: quantity }, (_, index) => {
       const sequence = firstSequence + index;
       return {
         streetId,
         sequence,
-        code: `BVC-${letters}-${streetKey}-${String(sequence).padStart(4, '0')}`,
+        code: `BVC-${street.code}-${String(sequence).padStart(4, '0')}`,
         createdBy: adminUserId,
       };
     });
@@ -399,6 +401,72 @@ export class AdminService {
     });
 
     return { user };
+  }
+
+  async createAssociationRepresentative(
+    actorUserId: string,
+    input: { fullName: string; phone: string; email?: string; associationName: string; password: string },
+  ) {
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: { adminRole: true },
+    });
+    if (actor?.adminRole !== AdminRole.SUPER_ADMIN && actor?.adminRole !== AdminRole.BERA_ADMIN) {
+      throw new ForbiddenException('Only a BERA administrator or super admin can create association representatives');
+    }
+
+    const associationName = input.associationName.trim();
+    const association = await this.prisma.association.findFirst({
+      where: { name: { equals: associationName, mode: 'insensitive' } },
+      select: { name: true },
+    });
+    if (!association) throw new BadRequestException('Select a recognised Bodija association');
+
+    const existingRepresentative = await this.prisma.user.findFirst({
+      where: {
+        adminRole: AdminRole.ASSOCIATION_REP,
+        associationName: { equals: association.name, mode: 'insensitive' },
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    if (existingRepresentative) {
+      throw new ConflictException(`${association.name} already has an active association representative`);
+    }
+
+    const phone = input.phone.replace(/[\s-]/g, '');
+    try {
+      const user = await this.prisma.user.create({
+        data: {
+          phone,
+          email: input.email?.trim().toLowerCase() || null,
+          displayName: input.fullName.trim(),
+          passwordHash: await bcrypt.hash(input.password, 12),
+          role: UserRole.ADMIN,
+          adminRole: AdminRole.ASSOCIATION_REP,
+          associationName: association.name,
+          isActive: true,
+        },
+        select: {
+          id: true, phone: true, email: true, displayName: true,
+          role: true, adminRole: true, associationName: true, isActive: true,
+        },
+      });
+      const suffix = createHash('sha256').update(user.id).digest('hex').slice(0, 12).toUpperCase();
+      await this.prisma.accessCard.create({
+        data: {
+          userId: user.id,
+          cardNumber: `BVC-REP-${suffix}`,
+          qrToken: `BVC-ACCESS-${randomBytes(24).toString('base64url')}`,
+        },
+      });
+      return { representative: user };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('An account already uses that phone number or email address');
+      }
+      throw error;
+    }
   }
 
   // ── Complaints queue ──────────────────────────────────────────────────

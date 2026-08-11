@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { AdminRole, ApprovalStatus, ComplaintStatus, UserRole } from '@prisma/client';
 import type { Request } from 'express';
-import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsEmail, IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
@@ -57,6 +57,24 @@ class GenerateStickersDto {
   @Min(1)
   @Max(500)
   quantity!: number;
+}
+
+class CreateAssociationRepresentativeDto {
+  @IsString() @MaxLength(120)
+  fullName!: string;
+
+  @IsString()
+  @Matches(/^[+0-9][0-9\s-]{7,19}$/, { message: 'phone must be a valid phone number' })
+  phone!: string;
+
+  @IsOptional() @IsEmail()
+  email?: string;
+
+  @IsString() @MaxLength(120)
+  associationName!: string;
+
+  @IsString() @MinLength(8)
+  password!: string;
 }
 
 @Controller('admin')
@@ -126,6 +144,14 @@ export class AdminController {
     @Req() req: AuthRequest,
   ) {
     return this.admin.updateUserPosition(userId, req.user.userId, input);
+  }
+
+  @Post('association-representatives')
+  createAssociationRepresentative(
+    @Body() input: CreateAssociationRepresentativeDto,
+    @Req() req: AuthRequest,
+  ) {
+    return this.admin.createAssociationRepresentative(req.user.userId, input);
   }
 
   // ── Complaints ─────────────────────────────────────────────────────────

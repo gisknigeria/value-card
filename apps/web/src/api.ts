@@ -26,9 +26,9 @@ export interface ResidentProfile {
   securityArrangement: string | null;
   hasCctv: boolean | null;
   hasSecurityLights: boolean | null;
-  powerSources: string[];
-  waterSources: string[];
-  wasteDisposalMethods: string[];
+  powerSources?: string[] | null;
+  waterSources?: string[] | null;
+  wasteDisposalMethods?: string[] | null;
   enumerationDate: string | null;
   enumeratorName: string | null;
   enumeratorPhone: string | null;
@@ -243,9 +243,10 @@ export function registerResident(input: {
 }
 
 export interface RegistrationSticker {
-  code: string;
-  streetName: string;
-  associationName: string;
+    code: string;
+    streetName: string;
+    streetCode: string;
+    associationName: string;
 }
 
 export function getRegistrationSticker(code: string) {
@@ -256,9 +257,9 @@ export interface ResidentDirectory {
   associations: {
     name: string;
     chairmanName: string | null;
-    streets: { name: string }[];
+      streets: { name: string; code: string | null }[];
   }[];
-  unassignedStreets: { name: string }[];
+    unassignedStreets: { name: string; code: string | null }[];
 }
 
 export function getResidentDirectory() {
@@ -656,7 +657,7 @@ export function removeDependant(token: string, id: string) {
 
 // ── Merchant auth ────────────────────────────────────────────────────
 
-export type MerchantUserRole = 'OWNER' | 'STAFF';
+export type MerchantUserRole = 'OWNER' | 'STAFF' | 'POS';
 
 export interface MerchantProfile {
   id: string;
@@ -719,6 +720,7 @@ export interface AdminMerchantListResponse {
 export type UserRole = 'RESIDENT' | 'MERCHANT' | 'SECURITY' | 'ADMIN';
 export type AdminRole =
   | 'SUPER_ADMIN'
+  | 'BERA_ADMIN'
   | 'ASSOCIATION_REP'
   | 'RESIDENT_REVIEWER'
   | 'MERCHANT_REVIEWER'
@@ -759,6 +761,23 @@ export function adminUpdateUserPosition(token: string, userId: string, input: {
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(input),
   });
+}
+
+export function adminCreateAssociationRepresentative(token: string, input: {
+  fullName: string;
+  phone: string;
+  email?: string;
+  associationName: string;
+  password: string;
+}) {
+  return apiRequest<{ representative: AdminUserPosition & { displayName: string | null } }>(
+    '/api/admin/association-representatives',
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 export function registerMerchant(input: {

@@ -60,7 +60,7 @@ export class DependantsService {
   async create(userId: string, input: CreateDependantDto) {
     const resident = await this.prisma.resident.findUnique({
       where: { userId },
-      select: { id: true, approvalStatus: true, registrationType: true },
+      select: { id: true, approvalStatus: true, registrationType: true, streetName: true, neighbourhood: true },
     });
     if (!resident) throw new NotFoundException('Resident profile not found');
 
@@ -71,6 +71,10 @@ export class DependantsService {
     }
 
     const phone = input.phone?.replace(/[\s-]/g, '') ?? null;
+    const street = await this.prisma.associationStreet.findFirst({
+      where: { name: resident.streetName || '', association: { name: resident.neighbourhood || '' } },
+      select: { code: true },
+    });
 
     const dependant = await this.prisma.dependant.create({
       data: {
@@ -80,7 +84,7 @@ export class DependantsService {
         phone,
         dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null,
         isMinor: input.isMinor,
-        membershipId: `BVC-FAM-${randomBytes(6).toString('hex').toUpperCase()}`,
+        membershipId: `BVC-${street?.code || 'FAM'}-${randomBytes(6).toString('hex').toUpperCase()}`,
         qrToken: `BVC-FAMILY-${randomBytes(24).toString('base64url')}`,
       },
       select: dependantSelect,

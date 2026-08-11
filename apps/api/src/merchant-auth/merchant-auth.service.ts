@@ -59,10 +59,6 @@ const merchantUserSelect = {
   merchant: { select: merchantSelect },
 } satisfies Prisma.MerchantUserSelect;
 
-const DEMO_MERCHANT_USER_ID = 'merchant-demo-user';
-const DEMO_MERCHANT_ID = 'merchant-demo';
-const DEMO_MERCHANT_PASSWORD = 'merchant123';
-
 @Injectable()
 export class MerchantAuthService {
   constructor(
@@ -82,6 +78,14 @@ export class MerchantAuthService {
 
     try {
       const result = await this.prisma.$transaction(async tx => {
+        const directoryStreet = await tx.associationStreet.findFirst({
+          where: {
+            name: input.streetName.trim(),
+            association: { name: input.associationName.trim() },
+          },
+          select: { code: true },
+        });
+        if (!directoryStreet?.code) throw new BadRequestException('Select a valid coded Bodija street and association');
         const merchant = await tx.merchant.create({
           data: {
             businessName: input.businessName.trim(),
@@ -111,7 +115,7 @@ export class MerchantAuthService {
                 residentialAddress: input.location.trim(),
                 memberCategory: 'Merchant owner',
                 consentedAt: new Date(),
-                card: { create: this.newBenefitCard() },
+                card: { create: this.newBenefitCard(directoryStreet.code) },
               },
             },
             merchantUser: {
@@ -142,56 +146,38 @@ export class MerchantAuthService {
     const phone = identifier.replace(/[\s-]/g, '');
     const normalizedIdentifier = identifier.toLowerCase();
 
-    try {
-      const user = await this.prisma.user.findFirst({
-        where: {
-          role: UserRole.MERCHANT,
-          OR: [{ phone }, { email: normalizedIdentifier }],
-        },
-        include: { merchantUser: { select: merchantUserSelect } },
-      });
+    const user = await this.prisma.user.findFirst({
+      where: {
+        role: UserRole.MERCHANT,
+        OR: [{ phone }, { email: normalizedIdentifier }],
+      },
+      include: { merchantUser: { select: merchantUserSelect } },
+    });
 
-      if (!user || !user.isActive || !(await bcrypt.compare(input.password, user.passwordHash))) {
-        throw new UnauthorizedException('Incorrect phone, email, or password');
-      }
-
-      const mu = user.merchantUser;
-      if (!mu || !mu.isActive) {
-        throw new UnauthorizedException('Staff account is not active');
-      }
-
-      if (mu.merchant.approvalStatus === ApprovalStatus.SUSPENDED) {
-        throw new ForbiddenException('This merchant account has been suspended by BERA');
-      }
-
-      return this.createSession(mu);
-    } catch (error) {
-      if (this.isDatabaseUnavailable(error) && this.matchesDemoMerchant(identifier, phone, input.password)) {
-        return this.createSession(this.getDemoMerchantUser());
-      }
-      throw error;
+    if (!user || !user.isActive || !(await bcrypt.compare(input.password, user.passwordHash))) {
+      throw new UnauthorizedException('Incorrect phone, email, or password');
     }
+
+    const mu = user.merchantUser;
+    if (!mu || !mu.isActive) {
+      throw new UnauthorizedException('Staff account is not active');
+    }
+
+    if (mu.merchant.approvalStatus === ApprovalStatus.SUSPENDED) {
+      throw new ForbiddenException('This merchant account has been suspended by BERA');
+    }
+
+    return this.createSession(mu);
   }
 
   // ── Session recovery ──────────────────────────────────────────────────
   async me(userId: string) {
-    if (userId === DEMO_MERCHANT_USER_ID) {
-      return { merchantUser: this.getDemoMerchantUser() };
-    }
-
-    try {
-      const mu = await this.prisma.merchantUser.findFirst({
-        where: { userId, isActive: true },
-        select: merchantUserSelect,
-      });
-      if (!mu) throw new UnauthorizedException('Merchant account unavailable');
-      return { merchantUser: mu };
-    } catch (error) {
-      if (this.isDatabaseUnavailable(error)) {
-        return { merchantUser: this.getDemoMerchantUser() };
-      }
-      throw error;
-    }
+    const mu = await this.prisma.merchantUser.findFirst({
+      where: { userId, isActive: true },
+      select: merchantUserSelect,
+    });
+    if (!mu) throw new UnauthorizedException('Merchant account unavailable');
+    return { merchantUser: mu };
   }
 
   // ── Change password ───────────────────────────────────────────────────
@@ -227,6 +213,10 @@ export class MerchantAuthService {
     const passwordHash = await bcrypt.hash(input.password, 12);
 
     try {
+      const directoryStreet = await this.prisma.associationStreet.findFirst({
+        where: { name: ownerMu.merchant.streetName || '', association: { name: ownerMu.merchant.associationName || '' } },
+        select: { code: true },
+      });
       const user = await this.prisma.user.create({
         data: {
           phone,
@@ -251,7 +241,7 @@ export class MerchantAuthService {
               associationConfirmedBy: ownerUserId,
               card: {
                 create: {
-                  ...this.newBenefitCard(),
+                  ...this.newBenefitCard(directoryStreet?.code || 'MER'),
                   status: ownerMu.merchant.approvalStatus === ApprovalStatus.APPROVED
                     ? 'ACTIVE'
                     : 'PENDING_VERIFICATION',
@@ -266,6 +256,7 @@ export class MerchantAuthService {
             create: {
               merchantId,
               role: (input.role as MerchantUserRole) ?? MerchantUserRole.STAFF,
+              canScanCards: input.role === 'POS' || input.role === 'OWNER',
             },
           },
         },
@@ -476,32 +467,8 @@ export class MerchantAuthService {
     staffUserId: string,
     canScanCards: boolean,
   ) {
-    const owner = await this.prisma.merchantUser.findFirst({
-      where: { userId: ownerUserId, merchantId, role: MerchantUserRole.OWNER, isActive: true },
-    });
-    if (!owner) throw new ForbiddenException('Only merchant owners can change staff permissions');
-
-    const staff = await this.prisma.merchantUser.findFirst({
-      where: { userId: staffUserId, merchantId, role: MerchantUserRole.STAFF },
-    });
-    if (!staff) throw new NotFoundException('Staff member not found');
-
-    const updated = await this.prisma.merchantUser.update({
-      where: { id: staff.id },
-      data: { canScanCards },
-      select: merchantUserSelect,
-    });
-    await this.prisma.notification.create({
-      data: {
-        userId: staffUserId,
-        type: 'MERCHANT_SCAN_PERMISSION',
-        title: canScanCards ? 'Card scanning enabled' : 'Card scanning disabled',
-        body: canScanCards
-          ? 'The merchant owner has granted you permission to scan customer cards.'
-          : 'The merchant owner has removed your permission to scan customer cards.',
-      },
-    });
-    return { merchantUser: updated };
+    void ownerUserId; void merchantId; void staffUserId; void canScanCards;
+    throw new BadRequestException('Scanning access is assigned by role. Create a POS account for scanning or use a merchant administrator account.');
   }
 
   private newAccessCard(prefix: string) {
@@ -512,60 +479,12 @@ export class MerchantAuthService {
     };
   }
 
-  private newBenefitCard() {
+  private newBenefitCard(streetCode: string) {
     const id = randomBytes(6).toString('hex').toUpperCase();
     return {
-      membershipId: `BVC-BEN-${id}`,
+      membershipId: `BVC-${streetCode}-${id}`,
       qrToken: `BVC-BENEFIT-${randomBytes(24).toString('base64url')}`,
     };
   }
 
-  private matchesDemoMerchant(identifier: string, phone: string, password: string) {
-    const normalized = identifier.toLowerCase();
-    return (
-      password === DEMO_MERCHANT_PASSWORD &&
-      (phone === '08030000002' || normalized === 'cedar@bodija.example.com' || normalized === '08030000002')
-    );
-  }
-
-  private getDemoMerchantUser() {
-    return {
-      id: 'merchant-demo-link',
-      role: MerchantUserRole.OWNER,
-      isActive: true,
-      canScanCards: true,
-      user: {
-        id: DEMO_MERCHANT_USER_ID,
-        phone: '08030000002',
-        email: 'cedar@bodija.example.com',
-        displayName: 'Morenike James',
-        accessCard: {
-          cardNumber: 'BVC-MER-DEMO0001',
-          qrToken: 'BVC-ACCESS-MERCHANT-DEMO',
-          status: 'ACTIVE',
-          issuedAt: new Date('2026-06-18T00:00:00.000Z'),
-          expiresAt: null,
-        },
-      },
-      merchant: {
-        id: DEMO_MERCHANT_ID,
-        businessName: 'Cedar Pharmacy',
-        category: 'Pharmacies',
-        contactPerson: 'Morenike James',
-        phone: '08030000002',
-        email: 'cedar@bodija.example.com',
-        location: 'Awolowo Avenue',
-        approvalStatus: ApprovalStatus.APPROVED,
-        statusReason: null,
-        statusChangedAt: null,
-        createdAt: new Date('2026-06-18T00:00:00.000Z'),
-      },
-    } as Prisma.MerchantUserGetPayload<{ select: typeof merchantUserSelect }>;
-  }
-
-  private isDatabaseUnavailable(error: unknown) {
-    if (!error || typeof error !== 'object') return false;
-    const message = error instanceof Error ? error.message : String(error);
-    return /can't reach database server|p1001|econnrefused|timed out|connect/i.test(message);
-  }
 }

@@ -51,6 +51,7 @@ enum OfferStatus {
 
 enum AdminRole {
   SUPER_ADMIN
+  BERA_ADMIN
   ASSOCIATION_REP
   RESIDENT_REVIEWER
   MERCHANT_REVIEWER
@@ -62,6 +63,7 @@ enum AdminRole {
 enum MerchantUserRole {
   OWNER
   STAFF
+  POS
 }
 
 enum ComplaintStatus {
@@ -176,6 +178,7 @@ model Association {
 model AssociationStreet {
   id            String      @id @default(cuid())
   name          String
+  code          String?     @unique
   associationId String?
   association   Association? @relation(fields: [associationId], references: [id])
   createdAt     DateTime    @default(now())

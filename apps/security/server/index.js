@@ -18,8 +18,7 @@ const secret = process.env.JWT_SECRET || 'demo-only-change-me';
 const databaseUrl = process.env.DATABASE_URL;
 const seed = {
   users: [
-    { id: 'u0', name: 'System Super Admin', email: 'superadmin@command.local', password: bcrypt.hashSync('superadmin123', 10), role: 'Super Admin', rank: 'Super Admin', active: true, unit: 'System Control', command: 'Oyo State Command', division: '', lga: '', lat: 7.3775, lng: 3.9470 },
-    { id: 'u1', name: 'Control Room Admin', email: 'admin@command.local', password: bcrypt.hashSync('admin123', 10), role: 'Admin', rank: 'Admin', active: true, unit: 'Control Room', command: 'Oyo State Command', division: '', lga: '', lat: 7.3775, lng: 3.9470 }
+    { id: 'security-chief-1', name: 'Chief Security Officer', email: 'security@bodija.local', password: bcrypt.hashSync(process.env.SECURITY_ADMIN_INITIAL_PASSWORD || 'SecurityAdmin@2026', 10), role: 'Admin', rank: 'Chief Security Officer', active: true, unit: 'Bodija Security Command', unitType: 'HQTS', command: 'Bodija Community', division: '', station: '', lga: 'Ibadan North', lat: 7.4100, lng: 3.9000 }
   ],
   incidents: [],
   cameras: [],
@@ -35,8 +34,8 @@ jsonDb.mapLayers ||= [];
 jsonDb.chatRooms ||= [];
 jsonDb.chatMembers ||= [];
 jsonDb.chatMessages ||= [];
-jsonDb.users = jsonDb.users.filter(user => !['u2', 'u3'].includes(user.id));
-if (!jsonDb.users.some(user => user.role === 'Super Admin')) jsonDb.users.unshift(seed.users[0]);
+jsonDb.users = jsonDb.users.filter(user => user.id === 'security-chief-1');
+if (!jsonDb.users.some(user => user.id === seed.users[0].id)) jsonDb.users.unshift(seed.users[0]);
 jsonDb.users = jsonDb.users.map(user => user.role === 'Admin' ? { ...user, rank: 'Admin', name: user.name === 'Command Admin' ? 'Control Room Admin' : user.name, unit: user.unit === 'Command' ? 'Control Room' : user.unit, command: user.command || 'Oyo State Command' } : user);
 jsonDb.incidents = jsonDb.incidents.filter(incident => !['i1', 'i2', 'i3'].includes(incident.id) && incident.createdBy !== 'seed');
 const saveJson = () => writeFileSync(dataFile, JSON.stringify(jsonDb, null, 2));
@@ -235,8 +234,8 @@ async function initPostgres() {
   const { rows } = await pool.query('select count(*)::int as count from users');
   await pool.query("delete from incidents where id in ('i1','i2','i3') or created_by='seed'");
   await pool.query("delete from users where id in ('u2','u3')");
-  const superAdmin = seed.users[0];
-  await pool.query('insert into users (id,name,email,password,role,rank,active,unit,unit_type,command,division,station,lga,lat,lng) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) on conflict (email) do nothing', [superAdmin.id, superAdmin.name, superAdmin.email, superAdmin.password, superAdmin.role, superAdmin.rank, superAdmin.active, superAdmin.unit, superAdmin.unitType || 'HQTS', superAdmin.command, superAdmin.division, superAdmin.station || '', superAdmin.lga, superAdmin.lat, superAdmin.lng]);
+  const securityAdmin = seed.users[0];
+  await pool.query('insert into users (id,name,email,password,role,rank,active,unit,unit_type,command,division,station,lga,lat,lng) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) on conflict (email) do nothing', [securityAdmin.id, securityAdmin.name, securityAdmin.email, securityAdmin.password, securityAdmin.role, securityAdmin.rank, securityAdmin.active, securityAdmin.unit, securityAdmin.unitType || 'HQTS', securityAdmin.command, securityAdmin.division, securityAdmin.station || '', securityAdmin.lga, securityAdmin.lat, securityAdmin.lng]);
   if (rows[0].count > 0) return;
   for (const user of seed.users.slice(1)) {
     await pool.query('insert into users (id,name,email,password,role,rank,active,unit,unit_type,command,division,station,lga,lat,lng) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)', [user.id, user.name, user.email, user.password, user.role, user.rank, user.active, user.unit, user.unitType || 'Division', user.command, user.division, user.station || '', user.lga, user.lat, user.lng]);
@@ -485,6 +484,35 @@ const canDeleteUser = (viewer, target) => {
 const canAccessRoom = (viewer, room) => !!room && (isAdminRole(viewer) || room.members?.includes(viewer.id));
 const isSosIncident = incident => incident?.reportType === 'SOS-Emergency' || incident?.style?.source === 'sos';
 const canAccessIncident = (viewer, incident) => isAdminRole(viewer) || incident.createdBy === viewer.id || incident.assignedTo === viewer.id || (incident.visibleTo || []).includes(viewer.id);
+
+const resolveMerchantPortalUser = async token => {
+  if (!pool || !token) return null;
+  let payload;
+  try {
+    payload = jwt.verify(token, process.env.BERA_JWT_SECRET || process.env.JWT_SECRET || secret);
+  } catch {
+    return null;
+  }
+  if (payload.role !== 'MERCHANT' || !payload.sub) return null;
+  const { rows } = await pool.query(
+    `select "merchantId", "role", "isActive"
+       from "MerchantUser"
+      where "userId" = $1
+      limit 1`,
+    [payload.sub],
+  );
+  const merchantUser = rows[0];
+  if (!merchantUser?.isActive || !['OWNER', 'POS'].includes(merchantUser.role)) return null;
+  return { userId: payload.sub, merchantId: merchantUser.merchantId, merchantRole: merchantUser.role };
+};
+
+const merchantPortalAuth = asyncRoute(async (req, res, next) => {
+  const token = (req.headers.authorization || '').replace('Bearer ', '');
+  const merchantUser = await resolveMerchantPortalUser(token);
+  if (!merchantUser) return res.status(403).json({ message: 'Merchant administrator or POS access required' });
+  req.merchantUser = merchantUser;
+  next();
+});
 const normalizeKey = value => String(value || '').trim().toLowerCase();
 const normalizeCommandKey = value => normalizeCommand(value || '').toLowerCase();
 const userIdOf = user => user?.userId || user?.id;
@@ -1038,9 +1066,9 @@ app.post('/api/walkin', auth, accessPointOnLocation, asyncRoute(async (req, res)
 }));
 
 // GET /api/walkin?merchantId= — list active walk-ins (for merchant dashboard)
-app.get('/api/walkin', auth, asyncRoute(async (req, res) => {
+app.get('/api/walkin', merchantPortalAuth, asyncRoute(async (req, res) => {
   if (!pool) return res.json({ walkIns: [] });
-  const merchantId = String(req.query.merchantId || '').trim();
+  const merchantId = req.merchantUser.merchantId;
   const { rows } = await pool.query(
     `select * from walk_in_logs
      where (destination_merchant_id = $1 or $1 = '')
@@ -1053,20 +1081,14 @@ app.get('/api/walkin', auth, asyncRoute(async (req, res) => {
 }));
 
 // POST /api/walkin/:id/acknowledge — merchant acknowledges guest, generates exit code
-app.post('/api/walkin/:id/acknowledge', asyncRoute(async (req, res) => {
-  // This endpoint is called from the MERCHANT app using the BERA JWT secret
+app.post('/api/walkin/:id/acknowledge', merchantPortalAuth, asyncRoute(async (req, res) => {
   if (!pool) return res.status(503).json({ message: 'Database required' });
-  const beraToken = (req.headers.authorization || '').replace('Bearer ', '');
-  if (!beraToken) return res.status(401).json({ message: 'Authorization required' });
-  let merchantPayload;
-  try {
-    merchantPayload = jwt.verify(beraToken, process.env.BERA_JWT_SECRET || process.env.JWT_SECRET || secret);
-  } catch { return res.status(401).json({ message: 'Invalid or expired merchant session' }); }
-  if (merchantPayload.role !== 'MERCHANT') return res.status(403).json({ message: 'Merchant access required' });
-
   const { id } = req.params;
   const { rows: existing } = await pool.query(`select * from walk_in_logs where id = $1`, [id]);
   if (!existing[0]) return res.status(404).json({ message: 'Walk-in log not found' });
+  if (existing[0].destination_merchant_id !== req.merchantUser.merchantId) {
+    return res.status(403).json({ message: 'This walk-in belongs to another merchant' });
+  }
   if (existing[0].acknowledged) return res.json({ walkIn: toWalkIn(existing[0]) }); // idempotent
 
   // Generate unique 6-digit exit code
@@ -1084,7 +1106,7 @@ app.post('/api/walkin/:id/acknowledge', asyncRoute(async (req, res) => {
     `update walk_in_logs
      set acknowledged = true, acknowledged_at = now(), acknowledged_by = $2, exit_code = $3
      where id = $1`,
-    [id, merchantPayload.sub, exitCode],
+    [id, req.merchantUser.userId, exitCode],
   );
 
   const { rows } = await pool.query(`select * from walk_in_logs where id = $1`, [id]);
@@ -1317,11 +1339,18 @@ app.post('/api/chat/rooms/:id/messages', auth, asyncRoute(async (req, res) => {
 app.post('/api/gps/ping', (req, res) => { io.emit('gps:broadcast', req.body); res.json({ received: true }); });
 
 // Socket.IO authentication middleware — all events require a valid JWT
-io.use((socket, next) => {
+io.use(async (socket, next) => {
   const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace('Bearer ', '');
   if (!token) return next(new Error('Authentication required'));
   try {
-    socket.data.user = jwt.verify(token, secret);
+    const decoded = jwt.verify(token, process.env.BERA_JWT_SECRET || secret);
+    if (decoded.role === 'MERCHANT') {
+      const merchantUser = await resolveMerchantPortalUser(token);
+      if (!merchantUser) return next(new Error('Merchant administrator or POS access required'));
+      socket.data.user = { ...decoded, ...merchantUser };
+    } else {
+      socket.data.user = decoded;
+    }
     next();
   } catch {
     next(new Error('Session expired. Reconnect to continue.'));
@@ -1332,11 +1361,11 @@ io.on('connection', socket => {
   const user = socket.data.user;
 
   // Join gate-events room — all authenticated SIGAR users receive live gate events
-  socket.join('gate-events');
+  if (user?.role !== 'MERCHANT') socket.join('gate-events');
 
   // Merchant portal clients register to receive walk-in notifications for their merchant
-  socket.on('merchant:register', ({ merchantId }) => {
-    if (merchantId) socket.join(`merchant:${merchantId}`);
+  socket.on('merchant:register', () => {
+    if (user?.role === 'MERCHANT' && user.merchantId) socket.join(`merchant:${user.merchantId}`);
   });
 
   // GPS updates — identify the sending user

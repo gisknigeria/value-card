@@ -31,7 +31,6 @@ import {
   Pencil,
   Trash2,
   Phone,
-  Download,
   Ticket,
   RefreshCw,
   Eye,
@@ -317,12 +316,35 @@ function Overview({ setView, resident, dashboard }: { setView: (v: View) => void
   const metrics = dashboard?.metrics;
   const offers = dashboard?.offers.slice(0, 3) ?? [];
   const activity = dashboard?.recentActivity.slice(0, 2) ?? [];
+  const [showCardPreview, setShowCardPreview] = useState(false);
+
+  useEffect(() => {
+    if (!showCardPreview) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowCardPreview(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [showCardPreview]);
+
   return (
     <div className="page-content">
       <section className="overview-card-lead">
-        <ValueCard resident={resident} compact />
+        <div className="overview-card-copy">
+          <span className="eyebrow">Digital membership</span>
+          <h2>Your Value Card stays private</h2>
+          <p>Open it only when you need to present it to an approved merchant or security officer.</p>
+        </div>
+        <button className="primary-button" type="button" onClick={() => setShowCardPreview(true)}>
+          <Eye size={17} /> View my card
+        </button>
       </section>
-      <section className="welcome-line"><div><h2>Welcome, {firstName(resident.fullName)}</h2><p>{cardActive ? 'Your card is active and ready to use across approved Bodija merchants.' : 'Your digital card has been created and will activate after your resident application is approved.'}</p></div><button className="primary-button" onClick={() => setView(cardActive ? 'directory' : 'card')}>{cardActive ? <Search size={17} /> : <CreditCard size={17} />} {cardActive ? 'Find a benefit' : 'View my card'}</button></section>
+      <section className="welcome-line"><div><h2>Welcome, {firstName(resident.fullName)}</h2><p>{cardActive ? 'Your card is active and ready to use across approved Bodija merchants.' : 'Your digital card has been created and will activate after your resident application is approved.'}</p></div><button className="primary-button" onClick={() => setView(cardActive ? 'directory' : 'card')}>{cardActive ? <Search size={17} /> : <CreditCard size={17} />} {cardActive ? 'Find a benefit' : 'Open card page'}</button></section>
       <section className="overview-grid overview-metrics-grid">
         <div className="metrics">
           <div className="metric"><span className="metric-icon savings"><Tag size={19} /></span><div><small>Saved this month</small><strong>{overviewCurrency(metrics?.savedThisMonth ?? 0)}</strong><em>{dashboard?.recentActivity.length ? `Across ${dashboard.recentActivity.length} recent interactions` : 'No recorded savings yet'}</em></div></div>
@@ -339,6 +361,22 @@ function Overview({ setView, resident, dashboard }: { setView: (v: View) => void
         <div className="section-block compact-section"><div className="section-title"><div><h3>Recent activity</h3><p>Your latest recorded benefits</p></div><button className="text-button" onClick={() => setView('activity')}>See history</button></div>{activity.map((item) => <div className="activity-item" key={item.id}><span className="activity-icon"><WalletCards size={17} /></span><div><strong>{item.merchant}</strong><small>{new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(item.createdAt))}</small></div><div className="activity-saving"><strong>{overviewCurrency(item.saved)}</strong><small>{item.kind}</small></div></div>)}</div>
         <div className="verification-note"><ShieldCheck size={27} /><div><h3>Your privacy is protected</h3><p>Card checks only show your name, membership status and cluster. Your private address is never shared with merchants.</p></div></div>
       </section>
+      {showCardPreview && (
+        <div className="overview-card-modal" role="dialog" aria-modal="true" aria-labelledby="overview-card-title">
+          <button className="overview-card-backdrop" type="button" aria-label="Close card preview" onClick={() => setShowCardPreview(false)} />
+          <section className="overview-card-dialog">
+            <div className="overview-card-dialog-head">
+              <div><span className="eyebrow">Private preview</span><h2 id="overview-card-title">My Value Card</h2></div>
+              <button className="icon-button" type="button" onClick={() => setShowCardPreview(false)} aria-label="Close card preview"><X size={20} /></button>
+            </div>
+            <div className="overview-card-dialog-body"><ValueCard resident={resident} /></div>
+            <div className="overview-card-dialog-actions">
+              <button className="secondary-button" type="button" onClick={() => setShowCardPreview(false)}>Cancel</button>
+              <button className="primary-button" type="button" onClick={() => { setShowCardPreview(false); setView('card'); }}>Open card page</button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
@@ -417,7 +455,6 @@ function CardPage({ resident, token, onCardDeactivated }: { resident: ResidentPr
   const [loadingRenewals, setLoadingRenewals] = useState(false);
   const [renewalError, setRenewalError] = useState<string | null>(null);
   const [requestingRenewal, setRequestingRenewal] = useState(false);
-  const [downloading, setDownloading] = useState(false);
   const [showCardPin, setShowCardPin] = useState(false);
 
   // Deactivate card state
@@ -438,8 +475,6 @@ function CardPage({ resident, token, onCardDeactivated }: { resident: ResidentPr
   const [creatingPass, setCreatingPass] = useState(false);
   const [passLabel, setPassLabel] = useState('');
   const [showPassForm, setShowPassForm] = useState(false);
-
-  const cardRef = useRef<HTMLDivElement>(null);
 
   const loadRenewals = useCallback(async () => {
     setLoadingRenewals(true);
@@ -483,29 +518,6 @@ function CardPage({ resident, token, onCardDeactivated }: { resident: ResidentPr
       setRenewalError(error instanceof Error ? error.message : 'Unable to submit your renewal request.');
     } finally {
       setRequestingRenewal(false);
-    }
-  };
-
-  const downloadCard = async () => {
-    if (!cardRef.current) return;
-    setDownloading(true);
-    try {
-      const { default: html2canvas } = await import('html2canvas');
-      await document.fonts?.ready;
-      const canvas = await html2canvas(cardRef.current, {
-        backgroundColor: null,
-        scale: 3,
-        useCORS: true,
-        logging: false,
-      });
-      const link = document.createElement('a');
-      link.download = `bodija-value-card-${card?.membershipId || 'card'}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-    } catch {
-      alert('Unable to download card. Try again.');
-    } finally {
-      setDownloading(false);
     }
   };
 
@@ -612,16 +624,13 @@ function CardPage({ resident, token, onCardDeactivated }: { resident: ResidentPr
           </div>
         </div>
       )}
-      <ValueCard resident={resident} cardRef={cardRef} showPin={showCardPin} />
+      <ValueCard resident={resident} showPin={showCardPin} />
       <div className="card-actions">
         <button className="primary-button" disabled={!active} onClick={() => setShowCardPin(value => !value)} aria-pressed={showCardPin}>
           {showCardPin ? <EyeOff size={17} /> : <Eye size={17} />} {active ? (showCardPin ? 'Hide card PIN' : 'Show card PIN') : suspended ? 'Card suspended' : rejected ? 'Application rejected' : 'Approval pending'}
         </button>
         <button className="secondary-button" type="button" onClick={requestRenewalNow} disabled={!canRequestRenewal || requestingRenewal}>
           {requestingRenewal ? <LoadingSpinner /> : <><Clock3 size={17} /> {renewalState?.hasPendingRenewal ? 'Renewal pending' : 'Request renewal'}</>}
-        </button>
-        <button className="outline-button" type="button" onClick={downloadCard} disabled={downloading || !card}>
-          {downloading ? <LoadingSpinner /> : <><Download size={17} /> Download card</>}
         </button>
         {card && card.status !== 'SUSPENDED' && (
           <button
@@ -811,9 +820,9 @@ function ProfilePage({ resident, token, onProfileUpdated }: { resident: Resident
     securityArrangement: resident.securityArrangement || '',
     hasCctv: resident.hasCctv ?? false,
     hasSecurityLights: resident.hasSecurityLights ?? false,
-    powerSources: resident.powerSources.join(', '),
-    waterSources: resident.waterSources.join(', '),
-    wasteDisposalMethods: resident.wasteDisposalMethods.join(', '),
+    powerSources: Array.isArray(resident.powerSources) ? resident.powerSources.join(', ') : '',
+    waterSources: Array.isArray(resident.waterSources) ? resident.waterSources.join(', ') : '',
+    wasteDisposalMethods: Array.isArray(resident.wasteDisposalMethods) ? resident.wasteDisposalMethods.join(', ') : '',
     enumerationDate: resident.enumerationDate?.slice(0, 10) || '',
     enumeratorName: resident.enumeratorName || '',
     enumeratorPhone: resident.enumeratorPhone || '',

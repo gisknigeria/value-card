@@ -1,31 +1,5 @@
 {
-  "users": [
-    {
-      "id": "u0",
-      "name": "System Super Admin",
-      "email": "superadmin@command.local",
-      "password": "$2b$10$NR3hHuQYr/fqvzZ22mXAGOVVOLWsRHAd8H.JnT9vknk9jYDecsRny",
-      "role": "Super Admin",
-      "rank": "Super Admin",
-      "active": true,
-      "unit": "System Control",
-      "command": "Oyo State Command",
-      "division": "",
-      "lga": "",
-      "lat": 7.3775,
-      "lng": 3.947
-    },
-    {
-      "id": "u1",
-      "name": "Control Room Admin",
-      "email": "admin@command.local",
-      "password": "$2b$10$bL4rzgAyBxyBhjdLfcyB8e31T15WFHVh6U/B0pXyvq1pmU17Ebonm",
-      "role": "Admin",
-      "active": true,
-      "rank": "Admin",
-      "command": "Oyo State Command"
-    }
-  ],
+  "users": [],
   "incidents": [
     {
       "title": "riot",

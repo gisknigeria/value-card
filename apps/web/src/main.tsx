@@ -7,6 +7,7 @@ import './styles.css';
 import './redesign.css';
 import './card-fixes.css';
 import './modern-theme.css';
+import './professional-system.css';
 
 const path = window.location.pathname;
 

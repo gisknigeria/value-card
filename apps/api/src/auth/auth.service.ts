@@ -94,13 +94,13 @@ export class AuthService {
       select: {
         name: true,
         chairmanName: true,
-        streets: { orderBy: { name: 'asc' }, select: { name: true } },
+        streets: { orderBy: { name: 'asc' }, select: { name: true, code: true } },
       },
     });
     const unassignedStreets = await this.prisma.associationStreet.findMany({
       where: { associationId: null },
       orderBy: { name: 'asc' },
-      select: { name: true },
+      select: { name: true, code: true },
     });
     return { associations, unassignedStreets };
   }
@@ -112,7 +112,7 @@ export class AuthService {
       select: {
         code: true,
         residentId: true,
-        street: { select: { name: true, association: { select: { name: true } } } },
+        street: { select: { name: true, code: true, association: { select: { name: true } } } },
       },
     });
     if (!sticker) throw new BadRequestException('Sticker code not found. Check the code printed on your sticker.');
@@ -120,6 +120,7 @@ export class AuthService {
     return {
       code: sticker.code,
       streetName: sticker.street.name,
+      streetCode: sticker.street.code || '',
       associationName: sticker.street.association?.name || '',
     };
   }
@@ -136,8 +137,6 @@ export class AuthService {
     const phone = input.phone.replace(/[\s-]/g, '');
     const email = input.email?.trim().toLowerCase() || null;
     const passwordHash = await bcrypt.hash(input.password, 12);
-    const membershipId = await this.createMembershipId();
-
     try {
       const user = await this.prisma.$transaction(async (tx) => {
         const sticker = await tx.streetSticker.findUnique({
@@ -146,6 +145,8 @@ export class AuthService {
         });
         if (!sticker) throw new BadRequestException('Sticker code not found. Check the code printed on your sticker.');
         if (sticker.residentId) throw new ConflictException('This sticker code has already been used to register an account.');
+        if (!sticker.street.code) throw new BadRequestException('This street does not yet have an identification code.');
+        const membershipId = `BVC-${sticker.street.code}-${randomBytes(5).toString('hex').toUpperCase()}`;
 
         const created = await tx.user.create({
           data: {
@@ -182,7 +183,7 @@ export class AuthService {
                         phone: member.phone?.replace(/[\s-]/g, '') || null,
                         dateOfBirth: member.dateOfBirth ? new Date(member.dateOfBirth) : null,
                         isMinor: member.isMinor,
-                        membershipId: `BVC-FAM-${randomBytes(6).toString('hex').toUpperCase()}`,
+                        membershipId: `BVC-${sticker.street.code}-${randomBytes(6).toString('hex').toUpperCase()}`,
                         qrToken: `BVC-FAMILY-${randomBytes(24).toString('base64url')}`,
                       })),
                     }
@@ -917,15 +918,4 @@ export class AuthService {
     return primaryComplete && dependantsComplete;
   }
 
-  private async createMembershipId() {
-    const year = new Date().getFullYear().toString().slice(-2);
-
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      const membershipId = `BVC-${year}-${randomInt(100000, 1000000)}`;
-      const exists = await this.prisma.card.findUnique({ where: { membershipId } });
-      if (!exists) return membershipId;
-    }
-
-    return `BVC-${year}-${randomBytes(5).toString('hex').toUpperCase()}`;
-  }
 }

@@ -44,7 +44,6 @@ import {
   listMerchantStaff,
   inviteMerchantStaff,
   deactivateMerchantStaff,
-  setMerchantStaffScanPermission,
   listMerchantOffers,
   createMerchantOffer,
   updateMerchantOffer,
@@ -140,7 +139,7 @@ function MerchantRegister({ onSwitch, onAuth }: {
   useEffect(() => { getResidentDirectory().then(setDirectory).catch(() => {}); }, []);
   const streetOptions = useMemo(
     () => [
-      ...(directory?.associations.flatMap(a => a.streets.map(s => ({ street: s.name, association: a.name }))) || []),
+      ...(directory?.associations.flatMap(a => a.streets.map(s => ({ street: s.name, code: s.code, association: a.name }))) || []),
     ].sort((a, b) => a.street.localeCompare(b.street)),
     [directory],
   );
@@ -238,7 +237,7 @@ function MerchantRegister({ onSwitch, onAuth }: {
                 <option value="">Select business street</option>
                 {streetOptions.map((item, index) => (
                   <option key={`${item.street}-${item.association}-${index}`} value={index}>
-                    {item.street}{item.association ? ` — ${item.association}` : ''}
+                      {item.code ? `[${item.code}] ` : ''}{item.street}{item.association ? ` — ${item.association}` : ''}
                   </option>
                 ))}
               </select></div>
@@ -395,11 +394,10 @@ function StaffPanel({ token, isOwner }: { token: string; isOwner: boolean }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showInvite, setShowInvite] = useState(false);
-  const [inviteForm, setInviteForm] = useState({ fullName: '', phone: '', password: '', role: 'STAFF' as 'OWNER' | 'STAFF' });
+  const [inviteForm, setInviteForm] = useState({ fullName: '', phone: '', password: '', role: 'STAFF' as 'OWNER' | 'STAFF' | 'POS' });
   const [inviting, setInviting] = useState(false);
   const [inviteError, setInviteError] = useState('');
   const [removingId, setRemovingId] = useState('');
-  const [permissionId, setPermissionId] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -434,17 +432,6 @@ function StaffPanel({ token, isOwner }: { token: string; isOwner: boolean }) {
     finally { setRemovingId(''); }
   };
 
-  const changeScanPermission = async (person: MerchantUserProfile, allowed: boolean) => {
-    setPermissionId(person.user.id); setError('');
-    try {
-      await setMerchantStaffScanPermission(token, person.user.id, allowed);
-      setStaff(items => items.map(item =>
-        item.user.id === person.user.id ? { ...item, canScanCards: allowed } : item,
-      ));
-    } catch (e) { setError(e instanceof Error ? e.message : 'Unable to update scan permission'); }
-    finally { setPermissionId(''); }
-  };
-
   return (
     <section className="profile-form" style={{ marginTop: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
@@ -456,7 +443,7 @@ function StaffPanel({ token, isOwner }: { token: string; isOwner: boolean }) {
         )}
       </div>
       <p style={{ color: 'var(--muted)', fontSize: 12, margin: '0 0 14px' }}>
-        Staff receive personal entry cards. Scanning is disabled unless an owner grants permission.
+        Regular staff have no transaction access. POS staff can scan cards, receive walk-in alerts and see only transactions created on their own account.
       </p>
 
       {showInvite && (
@@ -480,9 +467,10 @@ function StaffPanel({ token, isOwner }: { token: string; isOwner: boolean }) {
               </label>
               <label>
                 <span style={{ fontSize: 12, fontWeight: 700, color: '#2a4454', display: 'block', marginBottom: 5 }}>Role</span>
-                <select value={inviteForm.role} onChange={e => setInviteForm(f => ({ ...f, role: e.target.value as 'OWNER' | 'STAFF' }))} style={{ width: '100%', height: 45, padding: '0 12px', border: '1px solid #cad4da', borderRadius: 6, font: 'inherit', fontSize: 14 }}>
-                  <option value="STAFF">Sales staff</option>
-                  <option value="OWNER">Co-owner</option>
+                <select value={inviteForm.role} onChange={e => setInviteForm(f => ({ ...f, role: e.target.value as 'OWNER' | 'STAFF' | 'POS' }))} style={{ width: '100%', height: 45, padding: '0 12px', border: '1px solid #cad4da', borderRadius: 6, font: 'inherit', fontSize: 14 }}>
+                  <option value="STAFF">Regular staff</option>
+                  <option value="POS">Point-of-sale staff</option>
+                  <option value="OWNER">Merchant administrator</option>
                 </select>
               </label>
               <div className="modal-actions">
@@ -501,7 +489,7 @@ function StaffPanel({ token, isOwner }: { token: string; isOwner: boolean }) {
         const initials = s.user.displayName
           ? s.user.displayName.split(/\s+/).slice(0, 2).map(p => p[0]).join('').toUpperCase()
           : s.user.phone.slice(-2);
-        const roleLabel = s.role === 'OWNER' ? 'Owner' : 'Sales staff';
+        const roleLabel = s.role === 'OWNER' ? 'Merchant administrator' : s.role === 'POS' ? 'Point-of-sale staff' : 'Regular staff';
         return (
           <div key={s.id} className="dependant-card" style={{ marginBottom: 8 }}>
             <div className="dependant-avatar" style={{ fontSize: 12 }}>
@@ -514,17 +502,9 @@ function StaffPanel({ token, isOwner }: { token: string; isOwner: boolean }) {
                 {s.isActive ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
                 <span>{s.isActive ? 'Active' : 'Deactivated'}</span>
               </div>
-              {s.role === 'STAFF' && (
-                <label style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 7, fontSize: 12 }}>
-                  <input
-                    type="checkbox"
-                    checked={s.canScanCards}
-                    disabled={!isOwner || !s.isActive || permissionId === s.user.id}
-                    onChange={e => void changeScanPermission(s, e.target.checked)}
-                  />
-                  Allow this staff member to scan cards
-                </label>
-              )}
+              <div className={`dependant-status-badge ${s.role === 'POS' || s.role === 'OWNER' ? 'timeline-approved' : ''}`}>
+                <span>{s.role === 'POS' || s.role === 'OWNER' ? 'Scan and walk-in access' : 'No transaction access'}</span>
+              </div>
             </div>
             {isOwner && s.isActive && (
               <div className="dependant-actions">
@@ -831,7 +811,7 @@ function ScanPanel({ token, offers }: { token: string; offers: MerchantOffer[] }
 
 // ── Transactions panel ────────────────────────────────────────────────
 
-function TransactionsPanel({ token }: { token: string }) {
+function TransactionsPanel({ token, canReverse = false }: { token: string; canReverse?: boolean }) {
   const [transactions, setTransactions] = useState<MerchantTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -865,7 +845,7 @@ function TransactionsPanel({ token }: { token: string }) {
 
   return (
     <section style={{ marginTop: 24 }}>
-      {showReverseModal && (
+      {canReverse && showReverseModal && (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
           <div className="modal-card">
             <div className="modal-icon modal-reject"><RefreshCw size={22} /></div>
@@ -921,7 +901,7 @@ function TransactionsPanel({ token }: { token: string }) {
             </small>
           </div>
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            {!txn.reversedAt && txn.auditStatus !== 'REVERSAL' && (
+            {canReverse && !txn.reversedAt && txn.auditStatus !== 'REVERSAL' && (
               <button className="icon-button" title="Reverse transaction" onClick={() => setShowReverseModal(txn)}>
                 <RefreshCw size={15} />
               </button>
@@ -1315,7 +1295,10 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
   const mu = session.merchantUser;
   const m = mu.merchant;
   const isOwner = mu.role === 'OWNER';
-  const canScanCards = isOwner || mu.canScanCards;
+  const isPos = mu.role === 'POS';
+  const canScanCards = isOwner || isPos;
+  const canReceiveWalkIns = isOwner || isPos;
+  const canViewTransactions = isOwner || isPos;
   const isApproved = m.approvalStatus === 'APPROVED';
   const socketRef = useRef<any>(null);
 
@@ -1335,15 +1318,15 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
 
   // Pre-load offers so ScanPanel can use them
   useEffect(() => {
-    if (!isApproved) return;
+    if (!isApproved || !canScanCards) return;
     listMerchantOffers(session.accessToken)
       .then(({ offers: items }) => setOffers(items))
       .catch(() => {});
-  }, [isApproved, session.accessToken]);
+  }, [isApproved, canScanCards, session.accessToken]);
 
   // Poll for unacknowledged walk-ins + socket connection to receive live notifications
   useEffect(() => {
-    if (!isApproved) return;
+    if (!isApproved || !canReceiveWalkIns) return;
 
     const loadPending = () => {
       getMerchantWalkIns(session.accessToken, m.id)
@@ -1358,7 +1341,7 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
       try {
         // Dynamic import to avoid bundling issues if socket.io-client not in web app
         import('socket.io-client').then(({ io }) => {
-          const socket = io(securityUrl, { transports: ['polling', 'websocket'] });
+          const socket = io(securityUrl, { transports: ['polling', 'websocket'], auth: { token: session.accessToken } });
           socketRef.current = socket;
           socket.on('connect', () => socket.emit('merchant:register', { merchantId: m.id }));
           socket.on('walkin:arriving', () => { loadPending(); setPendingWalkIns(n => n + 1); });
@@ -1368,7 +1351,7 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
     }
 
     return () => { socketRef.current?.disconnect(); };
-  }, [isApproved, m.id, session.accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isApproved, canReceiveWalkIns, m.id, session.accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const merchantNav: Array<{ id: MerchantView; label: string; icon: typeof Store; visible?: boolean; badge?: number }> = [
     { id: 'overview', label: 'Overview', icon: Store },
@@ -1378,9 +1361,9 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
     { id: 'visitors', label: 'Visitor codes', icon: QrCode },
     { id: 'scan', label: 'Scan & log', icon: ShieldCheck, visible: canScanCards && isApproved },
     { id: 'offers', label: 'Offers', icon: Tag, visible: isOwner },
-    { id: 'transactions', label: 'Transactions', icon: RefreshCw, visible: isOwner && isApproved },
+    { id: 'transactions', label: isPos ? 'My transactions' : 'Transactions', icon: RefreshCw, visible: canViewTransactions && isApproved },
     { id: 'reports', label: 'Reports', icon: BarChart2, visible: isOwner && isApproved },
-    { id: 'walkins', label: 'Walk-ins', icon: Bell, visible: isOwner && isApproved, badge: pendingWalkIns },
+    { id: 'walkins', label: 'Walk-ins', icon: Bell, visible: canReceiveWalkIns && isApproved, badge: pendingWalkIns },
     { id: 'staff', label: 'Staff', icon: Users, visible: isOwner },
     { id: 'profile', label: 'Profile', icon: UserRound },
   ];
@@ -1401,7 +1384,7 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
           <button onClick={() => setView('notifications')}><Bell size={17} /><span>Alerts</span>{unreadCount > 0 && <em>{unreadCount}</em>}</button>
         </div>
         <div className="admin-account portal-sidebar-footer">
-          <div><strong>{m.businessName}</strong><small>{mu.role === 'OWNER' ? 'Owner' : 'Sales staff'} · {m.category}</small></div>
+          <div><strong>{m.businessName}</strong><small>{mu.role === 'OWNER' ? 'Merchant administrator' : mu.role === 'POS' ? 'Point-of-sale staff' : 'Regular staff'} · {m.category}</small></div>
           <button onClick={() => setShowChangePw(true)} title="Change password" aria-label="Change password" style={{ marginRight: 6 }}><KeyRound size={18} /></button>
           <button onClick={() => setView('notifications')} title="Notifications" aria-label="Notifications" style={{ marginRight: 6, position: 'relative' }}>
             <Bell size={18} />{unreadCount > 0 && <span style={{ position: 'absolute', top: 2, right: 2, background: '#dc2626', color: '#fff', borderRadius: 9, minWidth: 16, fontSize: 9 }}>{unreadCount}</span>}
@@ -1452,9 +1435,9 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
           {isOwner && <button className={view === 'offers' ? 'active' : ''} onClick={() => setView('offers')}>
             <Tag size={16} /> Offers
           </button>}
-          {isOwner && isApproved && (
+          {canViewTransactions && isApproved && (
             <button className={view === 'transactions' ? 'active' : ''} onClick={() => setView('transactions')}>
-              <RefreshCw size={16} /> Transactions
+              <RefreshCw size={16} /> {isPos ? 'My transactions' : 'Transactions'}
             </button>
           )}
           {isOwner && isApproved && (
@@ -1462,7 +1445,7 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
               <BarChart2 size={16} /> Reports
             </button>
           )}
-          {isOwner && isApproved && (
+          {canReceiveWalkIns && isApproved && (
             <button
               className={view === 'walkins' ? 'active' : ''}
               onClick={() => { setView('walkins'); setPendingWalkIns(0); }}
@@ -1492,7 +1475,7 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
         {view === 'notifications' && <MerchantNotifications token={session.accessToken} items={notifications} setItems={setNotifications} setUnreadCount={setUnreadCount} />}
         {view === 'scan'         && <ScanPanel token={session.accessToken} offers={offers} />}
         {view === 'offers'       && <OffersPanel token={session.accessToken} isApproved={isApproved} />}
-        {view === 'transactions' && <TransactionsPanel token={session.accessToken} />}
+        {view === 'transactions' && <TransactionsPanel token={session.accessToken} canReverse={isOwner} />}
         {view === 'reports'      && <ReportsPanel token={session.accessToken} />}
         {view === 'walkins'      && <WalkInsPanel token={session.accessToken} merchantId={m.id} />}
         {view === 'staff'        && <StaffPanel token={session.accessToken} isOwner={isOwner} />}
@@ -1564,7 +1547,7 @@ function RoleAccessCard({ mu, token, lead = false }: { mu: MerchantUserProfile; 
             <small style={{ color: 'var(--muted)', fontWeight: 800 }}>BERA · BODIJA VALUE CARD</small>
             <h2 style={{ margin: '8px 0 4px' }}>{name}</h2>
             <p style={{ margin: 0, color: 'var(--muted)' }}>
-              Merchant {mu.role === 'OWNER' ? 'owner' : 'staff'} · {mu.merchant.businessName}
+              {mu.role === 'OWNER' ? 'Merchant administrator' : mu.role === 'POS' ? 'Point-of-sale staff' : 'Regular staff'} · {mu.merchant.businessName}
             </p>
             <strong style={{ display: 'block', marginTop: 18 }}>{rawCard?.cardNumber || 'Awaiting association approval'}</strong>
             <span className={`dependant-status-badge ${cardActive ? 'status-approved' : 'status-pending'}`} style={{ marginTop: 8 }}>
@@ -1749,7 +1732,7 @@ function MerchantOverview({ m, isApproved, isOwner, setView, pendingWalkIns }: {
           <h3 style={{ fontSize: 16, marginBottom: 8 }}>Merchant staff access</h3>
           <p style={{ color: 'var(--muted)', fontSize: 13, maxWidth: 520 }}>
             Your account is an identity and gate-access account for {m.businessName}. Scanning resident cards
-            and merchant operations are restricted unless the owner grants you scan permission.
+            and merchant operations are restricted by your assigned role.
           </p>
           <button className="primary-button" onClick={() => setView('card')} style={{ marginTop: 10 }}>
             <QrCode size={16} /> View my entry card
@@ -2018,9 +2001,9 @@ function MerchantProfile({ m, mu }: { m: MerchantUserProfile['merchant']; mu: Me
       { label: 'Full name', value: personalName },
       { label: 'Phone', value: mu.user.phone },
       { label: 'Email', value: mu.user.email || '—' },
-      { label: 'Account type', value: 'Merchant staff' },
+      { label: 'Account type', value: mu.role === 'POS' ? 'Point-of-sale staff' : 'Regular staff' },
       { label: 'Workplace', value: m.businessName },
-      { label: 'Scan permission', value: mu.canScanCards ? 'Granted by owner' : 'Not granted' },
+      { label: 'Scan permission', value: mu.role === 'POS' ? 'Included with POS role' : 'Not available for regular staff' },
     ];
     return (
       <section className="profile-form" style={{ marginTop: 24 }}>
@@ -2030,7 +2013,7 @@ function MerchantProfile({ m, mu }: { m: MerchantUserProfile['merchant']; mu: Me
           </div>
           <div>
             <h2 style={{ fontSize: 20, marginBottom: 3 }}>{personalName}</h2>
-            <p style={{ color: 'var(--muted)', fontSize: 12, margin: 0 }}>{m.businessName} · Sales staff</p>
+            <p style={{ color: 'var(--muted)', fontSize: 12, margin: 0 }}>{m.businessName} · {mu.role === 'POS' ? 'Point-of-sale staff' : 'Regular staff'}</p>
           </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -2052,7 +2035,7 @@ function MerchantProfile({ m, mu }: { m: MerchantUserProfile['merchant']; mu: Me
         </div>
         <div>
           <h2 style={{ fontSize: 20, marginBottom: 3 }}>{m.businessName}</h2>
-          <p style={{ color: 'var(--muted)', fontSize: 12, margin: 0 }}>{m.category} · {mu.role === 'OWNER' ? 'Owner' : 'Sales staff'}</p>
+          <p style={{ color: 'var(--muted)', fontSize: 12, margin: 0 }}>{m.category} · {mu.role === 'OWNER' ? 'Merchant administrator' : mu.role === 'POS' ? 'Point-of-sale staff' : 'Regular staff'}</p>
         </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>

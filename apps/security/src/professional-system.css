@@ -1,0 +1,104 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Manrope:wght@600;700;800&display=swap');
+
+/* The security role uses the same Bodija brand system in a purpose-built dark mode. */
+:root {
+  font-family: 'DM Sans', 'Segoe UI', Arial, sans-serif;
+  --command-bg: #071923;
+  --command-bg-2: #0b222e;
+  --command-surface: rgba(10, 32, 43, .97);
+  --command-surface-2: rgba(16, 43, 55, .96);
+  --command-surface-3: rgba(24, 54, 66, .94);
+  --command-border: rgba(181, 205, 214, .16);
+  --command-border-strong: rgba(214, 168, 82, .5);
+  --command-text: #f3f7f8;
+  --command-muted: #94a9b2;
+  --command-accent: #d6a852;
+  --command-accent-2: #e1bd78;
+  --command-alert: #ed6a61;
+  --command-radius: 10px;
+}
+body, body * { font-family: 'DM Sans', 'Segoe UI', Arial, sans-serif; }
+body { color: var(--command-text); background: var(--command-bg); font-size: 14px !important; font-weight: 500 !important; }
+h1, h2, h3, h4, .sigar-word, .security-role-lockup strong { font-family: 'Manrope', 'DM Sans', sans-serif !important; letter-spacing: -.02em; }
+.eyebrow, time, .coordinates, .security-line, .server-switch > span, .detail dt { font-family: 'JetBrains Mono', monospace !important; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid rgba(214,168,82,.28); outline-offset: 2px; }
+
+.login-shell {
+  background:
+    radial-gradient(circle at 18% 15%, rgba(214,168,82,.14), transparent 28rem),
+    linear-gradient(145deg, #06151e 0%, #0a2531 58%, #071923 100%);
+}
+.login-shell::after { border-color: rgba(214,168,82,.12); box-shadow: 0 0 0 90px rgba(214,168,82,.022), 0 0 0 180px rgba(214,168,82,.014); }
+.login-system-state { border-color: rgba(214,168,82,.25); color: #c4d1d6; }
+.login-system-state i { background: var(--command-accent); box-shadow: 0 0 12px rgba(214,168,82,.7); }
+.login-brand .sigar-word { color: #fff !important; }
+.sigar-title strong { color: #e1bd78 !important; }
+.login-card {
+  border: 1px solid #e0e7ea;
+  border-radius: 16px;
+  background: rgba(250,252,252,.99);
+  box-shadow: 0 28px 80px rgba(0,0,0,.36);
+}
+.login-card::before { background: linear-gradient(90deg, transparent, var(--command-accent), transparent); }
+.security-role-lockup { border-left-color: #c8943e; }
+.security-role-lockup small { color: #8b6b35; }
+.security-role-lockup strong, .login-card h2 { color: #102a38; }
+.login-instruction, .login-card label { color: #5f747e; }
+.login-card input { border-color: #ccd9de; border-radius: 9px; color: #18303d; background: #fff; }
+.login-card input:focus { border-color: #597d8b; box-shadow: 0 0 0 3px rgba(29,89,108,.1); }
+.login-card .primary { border-radius: 9px; color: #fff; background: #123b4a; box-shadow: 0 7px 16px rgba(18,59,74,.16); }
+.login-card .primary:hover { background: #0d303d; }
+.install-login { border-color: #ccd9de; border-radius: 9px; color: #123b4a; background: #fff; }
+
+.app-shell { background: var(--command-bg); }
+.command-sidebar {
+  border-right: 1px solid var(--command-border);
+  background: linear-gradient(180deg, #0a202b, #071923);
+  box-shadow: 14px 0 40px rgba(0,0,0,.22);
+}
+.sidebar-brand { min-height: 68px; border-color: var(--command-border); }
+.brand-small b { color: #fff; font-family: 'Manrope', sans-serif !important; }
+.brand-small span, .sidebar-user small { color: var(--command-muted); }
+.sidebar-user { border-radius: 9px; background: rgba(255,255,255,.025); }
+.sidebar-user > span { border-radius: 8px; color: #123b4a; background: #d6a852; }
+.sidebar-search { min-height: 44px; border-radius: 9px; background: #0b222e; }
+.sidebar-search:focus-within { border-color: var(--command-accent); box-shadow: 0 0 0 3px rgba(214,168,82,.1); }
+.sidebar-actions.compact > button { min-height: 40px; border-radius: 8px; }
+.eyebrow { color: #e1bd78; font-weight: 600 !important; }
+.filters button { border-radius: 999px; }
+.filters button.active { color: #172b32; border-color: var(--command-accent); background: var(--command-accent); }
+.incident-card { border-radius: 9px; }
+.incident-card:hover, .incident-card.selected { border-color: rgba(214,168,82,.4); background: #102d3a; }
+.chips span { border-radius: 999px; background: #173642; }
+.officer-row i.active { background: #4dc59a; }
+.map { background: #071923; }
+.leaflet-tile-pane { filter: saturate(.66) brightness(.8) contrast(1.08) hue-rotate(155deg); }
+.map-wrap::before { background: var(--command-accent); box-shadow: 0 0 0 4px rgba(214,168,82,.14), 0 0 12px var(--command-accent); }
+.map-menu-trigger, .map-action, .desktop-map-search, .map-top-right > .coord-jump,
+.map-home-dropdown, .detail, .modal {
+  border-color: var(--command-border);
+  background: rgba(8, 28, 38, .95);
+}
+.map-menu-trigger, .map-action { border-radius: 9px; }
+.map-menu-trigger:hover, .map-action:hover, .map-action.active { color: #e1bd78; border-color: var(--command-accent); background: #153645; }
+.detail { border-radius: 0; box-shadow: -20px 0 56px rgba(0,0,0,.32); }
+.modal { border-radius: 12px; box-shadow: 0 28px 80px rgba(0,0,0,.45); }
+.modal input, .modal textarea, .modal select, .detail select { border-color: var(--command-border); border-radius: 8px; background: #071923; }
+.primary { border-radius: 8px; color: #172b32; background: #d6a852; }
+.primary:hover { background: #e1bd78; }
+.ghost { border-color: var(--command-border); border-radius: 8px; color: #cfdae0; background: #102a37; }
+.toast { border-color: rgba(214,168,82,.4); border-radius: 9px; color: #f5dfb3; background: #352c19; }
+
+@media (max-width: 760px) {
+  .login-shell { background: radial-gradient(circle at 50% 0, rgba(214,168,82,.14), transparent 35%), linear-gradient(165deg,#06151e,#0a2531 58%,#071923); }
+  .mobile-login-brand { border-bottom-color: #e1e8eb; }
+  .mobile-login-brand b { color: #102a38; font-family: 'Manrope', sans-serif !important; }
+  .mobile-login-brand > i { color: #7a5a28; background: #f6ecd9; }
+  .mobile-login-brand > i span { background: #c8943e; box-shadow: 0 0 8px #c8943e; }
+  .command-sidebar { border-radius: 14px; }
+  .mobile-close, .mobile-menu-fab { border-radius: 9px; }
+  .detail { border-radius: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}

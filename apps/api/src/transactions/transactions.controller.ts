@@ -50,6 +50,9 @@ export class TransactionsController {
   /** Log a benefit transaction */
   @Post('transactions')
   log(@Req() req: AuthRequest, @Body() body: LogTransactionDto) {
+    if (!req.user.canScanCards) {
+      throw new ForbiddenException('Only a merchant administrator or POS operator can log card transactions');
+    }
     return this.svc.logTransaction(req.user.merchantId!, req.user.userId, body);
   }
 
@@ -61,7 +64,14 @@ export class TransactionsController {
     @Query('to')       to?: string,
     @Query('offerId')  offerId?: string,
   ) {
-    return this.svc.listTransactions(req.user.merchantId!, { from, to, offerId });
+    if (req.user.merchantRole === 'STAFF') {
+      throw new ForbiddenException('Regular staff do not have access to transaction history');
+    }
+    return this.svc.listTransactions(
+      req.user.merchantId!,
+      { from, to, offerId },
+      req.user.merchantRole === 'POS' ? req.user.userId : undefined,
+    );
   }
 
   /** Reverse a transaction */
@@ -71,12 +81,18 @@ export class TransactionsController {
     @Param('id') id: string,
     @Body() body: ReverseTransactionDto,
   ) {
+    if (req.user.merchantRole !== 'OWNER') {
+      throw new ForbiddenException('Only a merchant administrator can reverse transactions');
+    }
     return this.svc.reverseTransaction(id, req.user.merchantId!, req.user.userId, body);
   }
 
   /** Redeem accumulated reward balance */
   @Post('rewards/redeem')
   redeem(@Req() req: AuthRequest, @Body() body: RedeemRewardDto) {
+    if (!req.user.canScanCards) {
+      throw new ForbiddenException('Only a merchant administrator or POS operator can redeem rewards');
+    }
     return this.svc.redeemReward(req.user.merchantId!, req.user.userId, body);
   }
 
@@ -87,6 +103,9 @@ export class TransactionsController {
     @Query('from') from?: string,
     @Query('to')   to?: string,
   ) {
+    if (req.user.merchantRole !== 'OWNER') {
+      throw new ForbiddenException('Only a merchant administrator can view business reports');
+    }
     return this.svc.report(req.user.merchantId!, from, to);
   }
 }

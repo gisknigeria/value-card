@@ -41,6 +41,8 @@ import {
   adminUpdateOfferStatus,
   adminListUsers,
   adminUpdateUserPosition,
+  adminCreateAssociationRepresentative,
+  getResidentDirectory,
   listRenewals,
   processRenewal,
   listMerchantsForWalkIn,
@@ -590,6 +592,13 @@ function PositionsPanel({ token, admin }: { token: string; admin: AdminIdentity 
   const [error, setError] = useState('');
   const [savingId, setSavingId] = useState('');
   const canAssign = admin.adminRole === 'SUPER_ADMIN';
+  const canCreateRepresentative = admin.adminRole === 'SUPER_ADMIN' || admin.adminRole === 'BERA_ADMIN';
+  const [associations, setAssociations] = useState<string[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [createdMessage, setCreatedMessage] = useState('');
+  const [representativeForm, setRepresentativeForm] = useState({
+    fullName: '', phone: '', email: '', associationName: '', password: '',
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -605,6 +614,31 @@ function PositionsPanel({ token, admin }: { token: string; admin: AdminIdentity 
   }, [token, query]);
 
   useEffect(() => { const t = window.setTimeout(load, 250); return () => window.clearTimeout(t); }, [load]);
+
+  useEffect(() => {
+    if (!canCreateRepresentative) return;
+    getResidentDirectory()
+      .then(data => setAssociations(data.associations.map(item => item.name)))
+      .catch(() => setAssociations([]));
+  }, [canCreateRepresentative]);
+
+  const createRepresentative = async (event: FormEvent) => {
+    event.preventDefault();
+    setCreating(true); setError(''); setCreatedMessage('');
+    try {
+      await adminCreateAssociationRepresentative(token, {
+        ...representativeForm,
+        email: representativeForm.email || undefined,
+      });
+      setCreatedMessage(`Association representative created for ${representativeForm.associationName}.`);
+      setRepresentativeForm({ fullName: '', phone: '', email: '', associationName: '', password: '' });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to create association representative');
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const updatePosition = async (user: AdminUserPosition, changes: Partial<Pick<AdminUserPosition, 'role' | 'adminRole' | 'associationName'>>) => {
     if (!canAssign) return;
@@ -627,11 +661,28 @@ function PositionsPanel({ token, admin }: { token: string; admin: AdminIdentity 
     }
   };
 
-  const adminRoles: AdminRole[] = ['SUPER_ADMIN', 'ASSOCIATION_REP', 'RESIDENT_REVIEWER', 'MERCHANT_REVIEWER', 'SUPPORT', 'AUDITOR', 'REPORTER'];
+  const adminRoles: AdminRole[] = ['SUPER_ADMIN', 'BERA_ADMIN', 'ASSOCIATION_REP', 'RESIDENT_REVIEWER', 'MERCHANT_REVIEWER', 'SUPPORT', 'AUDITOR', 'REPORTER'];
   const roles: UserRole[] = ['RESIDENT', 'SECURITY', 'ADMIN', 'MERCHANT'];
 
   return (
     <section className="admin-workspace">
+      {canCreateRepresentative && (
+        <form className="association-rep-form" onSubmit={createRepresentative}>
+          <div className="association-rep-form-head">
+            <div><span>Association access</span><h3>Create association representative</h3><p>The representative can review only residents, dependants and merchants assigned to their association.</p></div>
+            <UserPlus size={24} />
+          </div>
+          <div className="association-rep-fields">
+            <label><span>Full name</span><input required value={representativeForm.fullName} onChange={e => setRepresentativeForm(f => ({ ...f, fullName: e.target.value }))} /></label>
+            <label><span>Phone</span><input required value={representativeForm.phone} onChange={e => setRepresentativeForm(f => ({ ...f, phone: e.target.value }))} /></label>
+            <label><span>Email (optional)</span><input type="email" value={representativeForm.email} onChange={e => setRepresentativeForm(f => ({ ...f, email: e.target.value }))} /></label>
+            <label><span>Association</span><select required value={representativeForm.associationName} onChange={e => setRepresentativeForm(f => ({ ...f, associationName: e.target.value }))}><option value="">Select association</option>{associations.map(name => <option key={name} value={name}>{name}</option>)}</select></label>
+            <label><span>Temporary password</span><input required minLength={8} type="password" value={representativeForm.password} onChange={e => setRepresentativeForm(f => ({ ...f, password: e.target.value }))} /></label>
+            <button className="primary-button" disabled={creating}>{creating ? <span className="loading-spinner light" /> : <><UserPlus size={16} /> Create representative</>}</button>
+          </div>
+          {createdMessage && <div className="profile-success" role="status">{createdMessage}</div>}
+        </form>
+      )}
       <div className="admin-toolbar">
         <div>
           <strong style={{ fontSize: 13 }}>Assign positions</strong>
@@ -641,7 +692,7 @@ function PositionsPanel({ token, admin }: { token: string; admin: AdminIdentity 
         </div>
         <label className="admin-search"><Search size={17} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name, phone or email" /></label>
       </div>
-      {!canAssign && <div className="admin-alert" role="alert">Only a super admin can assign positions.</div>}
+      {!canAssign && admin.adminRole !== 'BERA_ADMIN' && <div className="admin-alert" role="alert">Only a super admin can assign positions.</div>}
       {error && <div className="admin-alert" role="alert">{error}</div>}
       <div className="admin-list-head dep-list-head" style={{ gridTemplateColumns: 'minmax(220px,1.4fr) minmax(120px,.7fr) minmax(170px,.9fr) minmax(170px,.9fr)' }}>
         <span>User</span><span>Portal role</span><span>Admin position</span><span>Association</span>
@@ -1262,13 +1313,14 @@ interface StreetStickerItem {
   downloadedAt: string | null;
   downloadCount: number;
   claimedAt: string | null;
-  street: { id: string; name: string; association: { name: string } | null };
+  street: { id: string; name: string; code: string | null; association: { name: string } | null };
   resident: { id: string; fullName: string } | null;
 }
 
 interface StickerStreet {
   id: string;
   name: string;
+  code: string | null;
   association: { name: string } | null;
   _count: { stickers: number };
 }
@@ -1471,7 +1523,7 @@ function StickerExportsPanel({ token }: { token: string }) {
       <div className="sticker-tabs"><button className={status === 'READY' ? 'active' : ''} onClick={() => setStatus('READY')}>Ready to print</button><button className={status === 'PRINTED' ? 'active' : ''} onClick={() => setStatus('PRINTED')}>Printed</button><button className={status === 'CLAIMED' ? 'active' : ''} onClick={() => setStatus('CLAIMED')}>Registered</button></div>
     </div>
     <form className="sticker-generator" onSubmit={generate}>
-      <label><span>Street</span><select required value={streetId} onChange={event => setStreetId(event.target.value)}><option value="">Select a street</option>{streets.map(street => <option value={street.id} key={street.id}>{street.name}{street.association?.name ? ` — ${street.association.name}` : ''} ({street._count.stickers})</option>)}</select></label>
+      <label><span>Street</span><select required value={streetId} onChange={event => setStreetId(event.target.value)}><option value="">Select a street</option>{streets.map(street => <option value={street.id} key={street.id}>{street.code ? `[${street.code}] ` : ''}{street.name}{street.association?.name ? ` — ${street.association.name}` : ''} ({street._count.stickers})</option>)}</select></label>
       <label><span>Quantity</span><input type="number" min={1} max={500} value={quantity} onChange={event => setQuantity(Math.max(1, Math.min(500, Number(event.target.value) || 1)))} /></label>
       <button className="primary-button" disabled={generating || !streetId}>{generating ? 'Generating…' : `Generate ${quantity} sticker${quantity === 1 ? '' : 's'}`}</button>
     </form>
@@ -1735,7 +1787,7 @@ function AdminDashboard({ token, admin, logout }: { token: string; admin: AdminI
     { label: 'Suspended', value: data.counts.suspended, icon: Ban, tone: 'suspended' },
   ], [data.counts]);
 
-  const adminNav = [
+  const allAdminNav = [
     { id: 'residents', label: 'Residents', icon: UserCheck },
     { id: 'dependants', label: 'Dependants', icon: Users },
     { id: 'positions', label: 'Positions', icon: ShieldCheck },
@@ -1750,6 +1802,9 @@ function AdminDashboard({ token, admin, logout }: { token: string; admin: AdminI
     { id: 'cards', label: 'Cards', icon: Download },
     { id: 'mycard', label: 'My card', icon: CreditCard },
   ] as const;
+  const adminNav = admin.adminRole === 'ASSOCIATION_REP'
+    ? allAdminNav.filter(item => ['residents', 'dependants', 'merchants'].includes(item.id))
+    : allAdminNav;
 
   return (
     <div className="admin-shell portal-shell admin-portal-shell">

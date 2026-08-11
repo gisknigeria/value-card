@@ -323,9 +323,10 @@ export class TransactionsService {
   async listTransactions(merchantId: string, filters: {
     residentToken?: string; offerId?: string;
     from?: string; to?: string;
-  }) {
+  }, loggedById?: string) {
     const where: Prisma.TransactionWhereInput = {
       merchantId,
+      ...(loggedById ? { loggedById } : {}),
       reversalOfId: null, // exclude reversal rows from list by default
       ...(filters.offerId ? { offerId: filters.offerId } : {}),
       ...(filters.from || filters.to ? {

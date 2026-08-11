@@ -165,7 +165,7 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                   <div className="auth-input"><TicketCheck size={18} /><input required autoComplete="off" value={form.stickerCode} onChange={event => update('stickerCode', event.target.value.toUpperCase())} placeholder="BVC-ABC-1234-0001" /></div>
                 </label>
                 {stickerChecking && <small>Checking sticker code…</small>}
-                {stickerInfo && <div className="sticker-code-confirmed"><CheckCircle2 size={18} /><div><strong>Sticker confirmed</strong><span>{stickerInfo.streetName}{stickerInfo.associationName ? ` — ${stickerInfo.associationName}` : ''}</span></div></div>}
+                {stickerInfo && <div className="sticker-code-confirmed"><CheckCircle2 size={18} /><div><strong>Sticker confirmed · {stickerInfo.streetCode}</strong><span>{stickerInfo.streetName}{stickerInfo.associationName ? ` — ${stickerInfo.associationName}` : ''}</span></div></div>}
                 {stickerError && <div className="auth-error" role="alert">{stickerError}</div>}
                 <label>
                   <span>Full name</span>

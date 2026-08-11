@@ -27,13 +27,6 @@ export class MerchantGuard implements CanActivate {
       throw new ForbiddenException('Merchant access is required');
     }
 
-    if (req.user.userId === 'merchant-demo-user') {
-      req.user.merchantId = 'merchant-demo';
-      req.user.merchantRole = 'OWNER';
-      req.user.canScanCards = true;
-      return true;
-    }
-
     const merchantUser = await this.prisma.merchantUser.findFirst({
       where: { userId: req.user.userId, isActive: true },
       select: {
@@ -56,7 +49,10 @@ export class MerchantGuard implements CanActivate {
     // Attach for use in controllers/services
     req.user.merchantId = merchantUser.merchant.id;
     req.user.merchantRole = merchantUser.role;
-    req.user.canScanCards = merchantUser.role === 'OWNER' || merchantUser.canScanCards;
+    // Scanning is role-based: merchant administrators and POS operators only.
+    // The legacy flag is retained in storage for backwards compatibility but
+    // can no longer elevate a regular staff account.
+    req.user.canScanCards = merchantUser.role === 'OWNER' || merchantUser.role === 'POS';
 
     return true;
   }
