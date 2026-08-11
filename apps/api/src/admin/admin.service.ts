@@ -70,7 +70,7 @@ export class AdminService {
   async stickerStreets(adminUserId: string) {
     const where = await this.stickerStreetScope(adminUserId);
     return this.prisma.associationStreet.findMany({
-      where,
+      where: { ...where, code: { not: null } },
       select: {
         id: true,
         name: true,

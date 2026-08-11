@@ -16,28 +16,54 @@ async function sync() {
     await client.query('BEGIN');
     await client.query('ALTER TABLE "AssociationStreet" ADD COLUMN IF NOT EXISTS "code" TEXT');
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS "AssociationStreet_code_key" ON "AssociationStreet"("code")');
-    // The supplied directory is authoritative. Account profiles store street
-    // names as text, while CASCADE safely clears obsolete unclaimed stickers.
-    await client.query('TRUNCATE TABLE "AssociationStreet", "Association" CASCADE');
-
-    const associationIds = new Map<string, string>();
-    for (const entry of ASSOCIATION_DIRECTORY) {
-      let associationId = associationIds.get(entry.association);
-      if (!associationId) {
-        const result = await client.query<{ id: string }>(
-          `INSERT INTO "Association" ("id", "name", "chairmanName", "chairmanPhone", "createdAt", "updatedAt")
-           VALUES ('assoc-' || md5(random()::text || clock_timestamp()::text), $1, $2, $3, NOW(), NOW()) RETURNING "id"`,
-          [entry.association, entry.chairman || null, entry.phone || null],
-        );
-        associationId = result.rows[0].id;
-        associationIds.set(entry.association, associationId);
-      }
-      await client.query(
-        `INSERT INTO "AssociationStreet" ("id", "name", "code", "associationId", "createdAt")
-         VALUES ('street-' || md5(random()::text || clock_timestamp()::text), $1, $2, $3, NOW())`,
-        [entry.street, entry.code, associationId],
-      );
-    }
+    const directoryJson = JSON.stringify(ASSOCIATION_DIRECTORY);
+    await client.query(
+      `WITH directory AS (
+         SELECT * FROM jsonb_to_recordset($1::jsonb)
+           AS x(street text, association text, code text, chairman text, phone text)
+       ), associations AS (
+         SELECT DISTINCT ON (association) association, chairman, phone FROM directory
+         ORDER BY association, chairman NULLS LAST
+       )
+       INSERT INTO "Association" ("id", "name", "chairmanName", "chairmanPhone", "createdAt", "updatedAt")
+       SELECT 'assoc-' || md5(random()::text || clock_timestamp()::text || association), association, chairman, phone, NOW(), NOW()
+       FROM associations
+       ON CONFLICT ("name") DO UPDATE SET
+         "chairmanName"=COALESCE(EXCLUDED."chairmanName", "Association"."chairmanName"),
+         "chairmanPhone"=COALESCE(EXCLUDED."chairmanPhone", "Association"."chairmanPhone"),
+         "updatedAt"=NOW()`,
+      [directoryJson],
+    );
+    await client.query(
+      `WITH directory AS (
+         SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(street text, association text, code text)
+       )
+       UPDATE "AssociationStreet" AS s SET "name"=d.street, "associationId"=a."id"
+       FROM directory d JOIN "Association" a ON a."name"=d.association
+       WHERE s."code"=d.code`,
+      [directoryJson],
+    );
+    await client.query(
+      `WITH directory AS (
+         SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(street text, association text, code text)
+       )
+       UPDATE "AssociationStreet" AS s SET "code"=d.code
+       FROM directory d JOIN "Association" a ON a."name"=d.association
+       WHERE s."name"=d.street AND s."associationId"=a."id" AND s."code" IS NULL
+         AND NOT EXISTS (SELECT 1 FROM "AssociationStreet" other WHERE other."code"=d.code)`,
+      [directoryJson],
+    );
+    await client.query(
+      `WITH directory AS (
+         SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(street text, association text, code text)
+       )
+       INSERT INTO "AssociationStreet" ("id", "name", "code", "associationId", "createdAt")
+       SELECT 'street-' || md5(random()::text || clock_timestamp()::text || d.code), d.street, d.code, a."id", NOW()
+       FROM directory d JOIN "Association" a ON a."name"=d.association
+       WHERE NOT EXISTS (SELECT 1 FROM "AssociationStreet" s WHERE s."code"=d.code)
+         AND NOT EXISTS (SELECT 1 FROM "AssociationStreet" s WHERE s."name"=d.street AND s."associationId"=a."id")`,
+      [directoryJson],
+    );
     await client.query(
       `UPDATE "Card" AS c
        SET "membershipId" = 'BVC-' || s."code" || '-' || UPPER(SUBSTR(MD5(c."id"), 1, 10))
@@ -55,7 +81,8 @@ async function sync() {
        WHERE d."residentId" = r."id"`,
     );
     await client.query('COMMIT');
-    console.log(`Street directory synchronized: ${ASSOCIATION_DIRECTORY.length} streets, ${associationIds.size} associations, ${new Set(codes).size} unique codes.`);
+    const associationCount = new Set(ASSOCIATION_DIRECTORY.map(item => item.association)).size;
+    console.log(`Street directory synchronized safely: ${ASSOCIATION_DIRECTORY.length} coded streets, ${associationCount} associations, existing stickers preserved.`);
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;

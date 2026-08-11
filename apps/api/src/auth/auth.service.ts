@@ -90,15 +90,16 @@ export class AuthService {
 
   async getResidentDirectory() {
     const associations = await this.prisma.association.findMany({
+      where: { streets: { some: { code: { not: null } } } },
       orderBy: { name: 'asc' },
       select: {
         name: true,
         chairmanName: true,
-        streets: { orderBy: { name: 'asc' }, select: { name: true, code: true } },
+        streets: { where: { code: { not: null } }, orderBy: { name: 'asc' }, select: { name: true, code: true } },
       },
     });
     const unassignedStreets = await this.prisma.associationStreet.findMany({
-      where: { associationId: null },
+      where: { associationId: null, code: { not: null } },
       orderBy: { name: 'asc' },
       select: { name: true, code: true },
     });
