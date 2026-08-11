@@ -27,8 +27,8 @@ async function ensureUser(client, input, resetPassword) {
     );
   } else {
     await client.query(
-      `INSERT INTO "User" ("id", "phone", "email", "displayName", "passwordHash", "role", "adminRole", "isActive")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,true)`,
+      `INSERT INTO "User" ("id", "phone", "email", "displayName", "passwordHash", "role", "adminRole", "isActive", "updatedAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,true,NOW())`,
       [userId, input.phone, input.email, input.displayName, passwordHash, input.role, input.adminRole || null],
     );
   }

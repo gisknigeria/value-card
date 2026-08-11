@@ -8,7 +8,7 @@ import {
   MdBadge, MdCameraAlt, MdClose, MdConfirmationNumber, MdHistory,
   MdImage, MdKeyboard, MdLogin, MdLogout, MdNote, MdPerson,
   MdQrCodeScanner, MdRefresh, MdStopCircle, MdVerifiedUser,
-  MdWifiOff, MdExitToApp, MdPersonAdd,
+  MdWifiOff, MdExitToApp, MdPersonAdd, MdLocationOn, MdEmergency,
 } from "react-icons/md";
 import { FaVideo, FaVideoSlash } from "react-icons/fa";
 import { io } from "socket.io-client";
@@ -61,17 +61,19 @@ async function decodeQRFromFile(file) {
 
 // ── Main component ────────────────────────────────────────────────────────
 export default function AccessPointApp({ session, onLogout }) {
-  const [tab, setTab] = useState("scan"); // "scan" | "visitor" | "walkin" | "exit" | "history"
+  const [tab, setTab] = useState("card");
   const [gate, setGate] = useState(session.user.unit || "Main Gate");
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [events, setEvents] = useState([]);
   const [merchants, setMerchants] = useState([]);
+  const [sosConfirm, setSosConfirm] = useState(false);
+  const [sosStatus, setSosStatus] = useState("");
 
   // GPS auto-share
   const socketRef = useRef(null);
   const [walkieSocket, setWalkieSocket] = useState(null);
   const gpsRef = useRef(null);
   const lastGpsRef = useRef(0);
+  const latestPositionRef = useRef(null);
   const [gpsActive, setGpsActive] = useState(false);
   const [locationAllowed, setLocationAllowed] = useState(false);
   const [locationState, setLocationState] = useState("checking");
@@ -79,6 +81,7 @@ export default function AccessPointApp({ session, onLogout }) {
   // Camera share
   const [sharingCamera, setSharingCamera] = useState(false);
   const cameraStreamRef = useRef(null);
+  const cameraPeersRef = useRef({});
 
   const headers = { Authorization: `Bearer ${session.token}`, "Content-Type": "application/json" };
 
@@ -106,12 +109,35 @@ export default function AccessPointApp({ session, onLogout }) {
         unit: session.user.unit, command: session.user.command,
         lat: session.user.lat, lng: session.user.lng,
       });
+      if (cameraStreamRef.current) socket.emit("camera:share:start", { userId: session.user.id, name: session.user.name, type: "Phone" });
     });
-    socket.on("gate:event", () => loadHistory());
+    const makeCameraPeer = viewerSocketId => {
+      const peer = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+      peer.onicecandidate = event => event.candidate && socket.emit("camera:signal", { target: viewerSocketId, data: { candidate: event.candidate } });
+      cameraPeersRef.current[viewerSocketId] = peer;
+      return peer;
+    };
+    socket.on("camera:viewer:request", async ({ viewerSocketId }) => {
+      const stream = cameraStreamRef.current;
+      if (!stream) return;
+      const peer = cameraPeersRef.current[viewerSocketId] || makeCameraPeer(viewerSocketId);
+      stream.getTracks().forEach(track => peer.addTrack(track, stream));
+      const offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      socket.emit("camera:signal", { target: viewerSocketId, data: { sdp: peer.localDescription } });
+    });
+    socket.on("camera:signal", async ({ from, data }) => {
+      const peer = cameraPeersRef.current[from];
+      if (data.sdp?.type === "answer" && peer) await peer.setRemoteDescription(data.sdp);
+      else if (data.candidate && peer) await peer.addIceCandidate(data.candidate).catch(() => {});
+    });
     // Auto-start GPS on mount
     startGps(socket);
     return () => {
       stopGps();
+      cameraStreamRef.current?.getTracks().forEach(track => track.stop());
+      Object.values(cameraPeersRef.current).forEach(peer => peer.close());
+      cameraPeersRef.current = {};
       setWalkieSocket(null);
       socket.disconnect();
     };
@@ -142,6 +168,7 @@ export default function AccessPointApp({ session, onLogout }) {
       pos => {
         const accurate = Number(pos.coords.accuracy) <= MAX_GPS_ACCURACY_METRES;
         const pt = { userId: session.user.id, lat: pos.coords.latitude, lng: pos.coords.longitude, speed: pos.coords.speed || 0, heading: pos.coords.heading || 0, accuracy: pos.coords.accuracy, timestamp: new Date().toISOString() };
+        latestPositionRef.current = pt;
         (socket || socketRef.current)?.emit("gps:update", pt);
         lastGpsRef.current = Date.now();
         setGpsActive(true);
@@ -169,6 +196,8 @@ export default function AccessPointApp({ session, onLogout }) {
     if (sharingCamera) {
       cameraStreamRef.current?.getTracks().forEach(t => t.stop());
       cameraStreamRef.current = null;
+      Object.values(cameraPeersRef.current).forEach(peer => peer.close());
+      cameraPeersRef.current = {};
       socketRef.current?.emit("camera:share:stop", { userId: session.user.id });
       setSharingCamera(false);
       return;
@@ -178,28 +207,44 @@ export default function AccessPointApp({ session, onLogout }) {
       cameraStreamRef.current = stream;
       socketRef.current?.emit("camera:share:start", { userId: session.user.id, name: session.user.name, type: "Phone" });
       setSharingCamera(true);
-    } catch { /* denied */ }
+    } catch { setSosStatus("Camera permission was not granted."); }
+  };
+
+  const sendSos = async () => {
+    const point = latestPositionRef.current;
+    if (!point || !isOnline) { setSosStatus("SOS needs an active network and live location."); return; }
+    const alert = {
+      id: `em-${Date.now()}`, userId: session.user.id, name: session.user.name,
+      role: session.user.role, rank: session.user.rank, unit: gate,
+      command: session.user.command, type: "Access point emergency",
+      text: `Urgent assistance requested at ${gate}`,
+      lat: point.lat, lng: point.lng, timestamp: new Date().toISOString(),
+    };
+    setSosStatus("Sending SOS…");
+    try {
+      const response = await fetch(`${API}/incidents`, {
+        method: "POST", headers,
+        body: JSON.stringify({
+          title: `SOS - ${gate}`, description: `${session.user.name} requests urgent assistance`,
+          reportType: "SOS-Emergency", severity: "Critical", status: "Open",
+          lat: point.lat, lng: point.lng, assignedTo: "", visibleTo: [], media: [],
+          style: { source: "sos", icon: "SOS", color: "#dc2626", fillColor: "#ef4444", opacity: 0.95 },
+        }),
+      });
+      if (!response.ok) throw new Error("SOS storage failed");
+      socketRef.current?.emit("emergency:send", alert);
+      setSosStatus("SOS sent to the control room and nearby officers.");
+      setSosConfirm(false);
+    } catch { setSosStatus("SOS could not be sent. Use the radio immediately."); }
   };
 
   // ── History ─────────────────────────────────────────────────────────────
-  const loadHistory = useCallback(async () => {
-    try {
-      const r = await fetch(`${API}/access/events?limit=15`, { headers });
-      if (!r.ok) return;
-      const d = await r.json();
-      setEvents(d.events ?? d);
-    } catch { /* non-critical */ }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { loadHistory(); }, [loadHistory]);
-
   // ── Merchants list ──────────────────────────────────────────────────────
   useEffect(() => {
     fetch(`${API}/merchants/list`, { headers })
       .then(r => r.json()).then(d => setMerchants(d.merchants || []))
       .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const decisionClass = d => (d === "ALLOWED" || d === "OVERRIDE_ALLOWED") ? "allowed" : "denied";
 
   if (!locationAllowed) {
     const messages = {
@@ -241,9 +286,6 @@ export default function AccessPointApp({ session, onLogout }) {
           <span className={`ap-gps ${gpsActive ? "active" : ""}`} title={gpsActive ? "GPS active" : "GPS inactive"}>
             📍 {gpsActive ? "GPS live" : "GPS off"}
           </span>
-          <button className={`ap-cam-btn ${sharingCamera ? "active" : ""}`} onClick={toggleCamera} title={sharingCamera ? "Stop camera" : "Share camera"}>
-            {sharingCamera ? <FaVideo size={14} /> : <FaVideoSlash size={14} />}
-          </button>
         </div>
         <div className="ap-gate-select">
           <select value={gate} onChange={e => setGate(e.target.value)}>
@@ -256,10 +298,17 @@ export default function AccessPointApp({ session, onLogout }) {
         <button className="ap-logout" onClick={onLogout} title="Sign out"><MdLogout size={18} /></button>
       </header>
 
+      <section className="ap-quick-actions" aria-label="Officer safety controls">
+        <button className="ap-sos-action" onClick={() => setSosConfirm(true)}><MdEmergency /><span><strong>SOS</strong><small>Request urgent support</small></span></button>
+        <button className={`ap-video-action ${sharingCamera ? "active" : ""}`} onClick={toggleCamera}>{sharingCamera ? <FaVideo /> : <FaVideoSlash />}<span><strong>{sharingCamera ? "Stop video" : "Share video"}</strong><small>{sharingCamera ? "Control room can view live" : "Send a live phone feed"}</small></span></button>
+      </section>
+      {sosStatus && <div className={`ap-action-status ${sosStatus.includes("sent") ? "success" : ""}`}>{sosStatus}</div>}
+      {sosConfirm && <div className="ap-sos-confirm" role="dialog" aria-modal="true" aria-label="Confirm SOS"><div><MdEmergency /><h2>Send emergency SOS?</h2><p>Your live location and gate assignment will be sent to the control room and nearby officers.</p><button className="ap-sos-send" onClick={sendSos}>Send SOS now</button><button className="ap-sos-cancel" onClick={() => setSosConfirm(false)}>Cancel</button></div></div>}
+
       {/* ── Tabs ──────────────────────────────────────────────── */}
       <nav className="ap-tabs">
-        <button className={tab === "scan"    ? "active" : ""} onClick={() => setTab("scan")}>
-          <MdQrCodeScanner /> Scan card
+        <button className={tab === "card" ? "active" : ""} onClick={() => setTab("card")}>
+          <MdBadge /> Card code
         </button>
         <button className={tab === "visitor" ? "active" : ""} onClick={() => setTab("visitor")}>
           <MdConfirmationNumber /> Visitor code
@@ -270,18 +319,14 @@ export default function AccessPointApp({ session, onLogout }) {
         <button className={tab === "exit"    ? "active amber" : "amber"} onClick={() => setTab("exit")}>
           <MdExitToApp /> Exit code
         </button>
-        <button className={tab === "history" ? "active" : ""} onClick={() => { setTab("history"); loadHistory(); }}>
-          <MdHistory /> History
-        </button>
       </nav>
 
       {/* ── Tab content ───────────────────────────────────────── */}
       <div className="ap-content">
-        {tab === "scan"    && <ScanTab    gate={gate} session={session} headers={headers} isOnline={isOnline} onVerified={loadHistory} />}
-        {tab === "visitor" && <VisitorTab gate={gate} headers={headers} isOnline={isOnline} onVerified={loadHistory} />}
+        {tab === "card" && <CardCodeTab gate={gate} headers={headers} isOnline={isOnline} />}
+        {tab === "visitor" && <VisitorTab gate={gate} headers={headers} isOnline={isOnline} onVerified={() => {}} />}
         {tab === "walkin"  && <WalkInTab  gate={gate} headers={headers} isOnline={isOnline} merchants={merchants} />}
-        {tab === "exit"    && <ExitTab    gate={gate} headers={headers} isOnline={isOnline} onExited={loadHistory} />}
-        {tab === "history" && <HistoryTab events={events} onRefresh={loadHistory} decisionClass={decisionClass} />}
+        {tab === "exit" && <ExitTab gate={gate} headers={headers} isOnline={isOnline} onExited={() => {}} />}
       </div>
       <WalkieReceiver socket={walkieSocket} userName={session.user.name} />
     </div>
@@ -289,6 +334,31 @@ export default function AccessPointApp({ session, onLogout }) {
 }
 
 // ── ScanTab — QR card verification ───────────────────────────────────────
+function CardCodeTab({ gate, headers, isOnline }) {
+  const [code, setCode] = useState("");
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const verify = async () => {
+    const value = code.trim().toUpperCase();
+    if (!value || busy) return;
+    if (!isOnline) { setResult({ decision: "DENIED", reason: "Offline — card code cannot be verified." }); return; }
+    setBusy(true); setResult(null);
+    try {
+      const response = await fetch(`${API}/access/verify`, { method: "POST", headers, body: JSON.stringify({ token: value, direction: "ENTRY", gate, idempotencyKey: `card-${value}-${Date.now()}` }) });
+      const data = await response.json();
+      setResult({ ...data, decision: data.decision || "DENIED", reason: data.reason || data.message || "Unable to verify card" });
+    } catch { setResult({ decision: "DENIED", reason: "Network error — do not allow entry." }); }
+    finally { setBusy(false); }
+  };
+  const allowed = result?.decision === "ALLOWED" || result?.decision === "OVERRIDE_ALLOWED";
+  return <div className="ap-tab-panel ap-code-panel">
+    <div className="ap-section-hint"><MdBadge /><p>Type the card number printed on the resident’s card. No camera or scanning is required.</p></div>
+    <label className="ap-field">Card number<div className="ap-input-row"><MdBadge /><input value={code} onChange={event => setCode(event.target.value.toUpperCase())} placeholder="BVC-ASA-XXXXXXXXXX" autoCapitalize="characters" autoFocus onKeyDown={event => event.key === "Enter" && verify()} /></div></label>
+    <button className="ap-verify-btn" onClick={verify} disabled={busy || !code.trim() || !isOnline}><MdVerifiedUser /> {busy ? "Checking…" : "Verify card code"}</button>
+    {result && <div className={`ap-result ${allowed ? "allowed" : "denied"}`}><div className="ap-result-head"><span>{result.decision}</span><strong>{result.reason}</strong></div>{result.member && <div className="ap-result-body"><div><small>Resident</small><strong>{result.member.fullName}</strong></div><div><small>Card number</small><strong>{result.member.membershipId}</strong></div><div><small>Association</small><strong>{result.member.neighbourhood}</strong></div><div><small>Status</small><strong>{result.member.cardStatus}</strong></div></div>}</div>}
+  </div>;
+}
+
 function ScanTab({ gate, session, headers, isOnline, onVerified }) {
   const [inputMode, setInputMode] = useState("camera");
   const [token,    setToken]    = useState("");

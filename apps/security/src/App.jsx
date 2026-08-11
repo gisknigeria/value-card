@@ -5441,15 +5441,6 @@ function Dashboard({ session, onLogout }) {
                   <MdPersonAdd /> Walk-in
                 </button>
               )}
-              <button
-                onClick={() => {
-                  setToolsOpen((value) => !value);
-                  setAnalyticsOpen(false);
-                }}
-                className={toolsOpen ? "active" : ""}
-              >
-                <FaTools /> Tools
-              </button>
               {toolsOpen && (
                 <div className="tools-grid sidebar-tools-grid sidebar-tools-dropdown">
                   <button
