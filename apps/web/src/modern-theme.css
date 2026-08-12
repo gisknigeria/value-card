@@ -76,7 +76,7 @@
   .portal-mobile-header>button,.portal-mobile-actions button{position:relative;width:44px;height:44px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.16);border-radius:14px;color:#fff;background:rgba(255,255,255,.08)}
   .portal-mobile-actions button.danger{color:#ffc0c5;background:rgba(181,33,58,.22)}
   .portal-mobile-actions em{position:absolute;right:-4px;top:-4px}
-  .portal-sidebar{position:fixed;z-index:110;left:0;right:0;bottom:0;width:100%;padding:10px 8px calc(10px + env(safe-area-inset-bottom));border:0;border-top:1px solid rgba(81,43,108,.14);background:rgba(255,255,255,.98);box-shadow:0 -12px 36px rgba(54,25,71,.11);backdrop-filter:blur(18px);overflow:hidden}
+  .portal-sidebar{position:fixed;z-index:110;left:0;right:0;bottom:0;top:auto;width:100%;height:auto;padding:10px 8px calc(10px + env(safe-area-inset-bottom));border:0;border-top:1px solid rgba(81,43,108,.14);background:rgba(255,255,255,.98);box-shadow:0 -12px 36px rgba(54,25,71,.11);backdrop-filter:blur(18px);overflow:hidden}
   .portal-sidebar-brand,.portal-sidebar-footer,.portal-quick-actions{display:none!important}
   .portal-nav{flex-direction:row;gap:10px;margin:0;padding:0 10px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;align-items:center;min-height:76px;scroll-snap-type:x mandatory;justify-content:flex-start}
   .portal-nav::-webkit-scrollbar{display:none}
@@ -86,7 +86,7 @@
   .portal-nav button.active{color:#fff;background:linear-gradient(180deg,rgba(89,51,114,.98),rgba(112,63,153,1));box-shadow:0 12px 28px rgba(91,50,121,.22);transform:translateY(-2px)}
   .portal-nav button.active svg{color:#fff}
   .portal-nav button em{position:absolute;right:10px;top:8px}
-  .portal-content{margin:0!important;padding:24px 16px calc(32px + env(safe-area-inset-bottom))!important}
+  .portal-content{margin:0!important;min-height:calc(100vh - 64px - 76px);padding:24px 16px calc(32px + env(safe-area-inset-bottom))!important}
   .portal-content .admin-title{margin-top:0}
   .portal-content .admin-title h1{font-size:clamp(26px,8vw,38px)}
 }
