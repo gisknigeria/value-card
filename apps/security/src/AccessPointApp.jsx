@@ -62,9 +62,12 @@ async function decodeQRFromFile(file) {
 // ── Main component ────────────────────────────────────────────────────────
 export default function AccessPointApp({ session, onLogout }) {
   const [tab, setTab] = useState("card");
-  const [gate, setGate] = useState(session.user.unit || "Main Gate");
+  const gate = session.user.unit || "Main Gate";
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [merchants, setMerchants] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [evtPage, setEvtPage] = useState(0);
+  const [totalEvents, setTotalEvents] = useState(0);
   const [sosConfirm, setSosConfirm] = useState(false);
   const [sosStatus, setSosStatus] = useState("");
 
@@ -84,6 +87,7 @@ export default function AccessPointApp({ session, onLogout }) {
   const cameraPeersRef = useRef({});
 
   const headers = { Authorization: `Bearer ${session.token}`, "Content-Type": "application/json" };
+  const decisionClass = (d = "") => (d === "ALLOWED" || d === "OVERRIDE_ALLOWED") ? "allowed" : "denied";
 
   // ── Online/offline ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -246,29 +250,21 @@ export default function AccessPointApp({ session, onLogout }) {
       .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!locationAllowed) {
-    const messages = {
-      checking: ["Connecting live location", "Keep location services on while SIGAR connects your position to the control room."],
-      denied: ["Location permission required", "Enable precise location for SIGAR in your browser or phone settings, then try again."],
-      inaccurate: ["Waiting for a precise GPS fix", "Move to an open area and keep precise location enabled so the control room can see you."],
-      stale: ["Location signal lost", "SIGAR must receive a live location continuously. Reconnect GPS to continue."],
-      unavailable: ["Location currently unavailable", "Check your phone's location service and network, then try again."],
-      unsupported: ["Location is not supported", "Use a device and browser that supports secure GPS location."],
-    };
-    const [title, detail] = messages[locationState] || messages.checking;
-    return <div className="ap-location-lock">
-      <div className="ap-location-lock-card">
-        <div className="ap-location-pulse"><span /></div>
-        <small>ACCESS POINT SECURITY</small>
-        <h1>{title}</h1>
-        <p>{detail}</p>
-        <div className="ap-location-assignment"><span>Tracking status</span><strong>Live GPS required</strong></div>
-        <button className="ap-location-retry" onClick={() => { stopGps(); startGps(socketRef.current); }}>Retry live location</button>
-        <button className="ap-location-signout" onClick={onLogout}>Sign out</button>
-      </div>
-      <WalkieReceiver socket={walkieSocket} userName={session.user.name} />
-    </div>;
-  }
+  const loadEvents = useCallback(async (page = 0) => {
+    try {
+      const params = new URLSearchParams({ limit: String(20), offset: String(page * 20) });
+      const response = await fetch(`${API}/access/events?${params.toString()}`, { headers });
+      if (!response.ok) return;
+      const data = await response.json();
+      setEvents(data.events ?? data);
+      setTotalEvents(data.total ?? 0);
+      setEvtPage(page);
+    } catch {
+      // ignore history load failures
+    }
+  }, [headers]);
+
+  useEffect(() => { loadEvents(0); }, [loadEvents]);
 
   return (
     <div className="ap-shell">
@@ -283,17 +279,6 @@ export default function AccessPointApp({ session, onLogout }) {
         </div>
         <div className="ap-status">
           {!isOnline && <span className="ap-offline"><MdWifiOff /> Offline</span>}
-          <span className={`ap-gps ${gpsActive ? "active" : ""}`} title={gpsActive ? "GPS active" : "GPS inactive"}>
-            📍 {gpsActive ? "GPS live" : "GPS off"}
-          </span>
-        </div>
-        <div className="ap-gate-select">
-          <select value={gate} onChange={e => setGate(e.target.value)}>
-            <option>Main Gate</option>
-            <option>Awolowo Avenue Gate</option>
-            <option>Housing Road Gate</option>
-            <option>Market Gate</option>
-          </select>
         </div>
         <button className="ap-logout" onClick={onLogout} title="Sign out"><MdLogout size={18} /></button>
       </header>
@@ -319,6 +304,9 @@ export default function AccessPointApp({ session, onLogout }) {
         <button className={tab === "exit"    ? "active amber" : "amber"} onClick={() => setTab("exit")}>
           <MdExitToApp /> Exit code
         </button>
+        <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}> 
+          <MdHistory /> History
+        </button>
       </nav>
 
       {/* ── Tab content ───────────────────────────────────────── */}
@@ -327,6 +315,7 @@ export default function AccessPointApp({ session, onLogout }) {
         {tab === "visitor" && <VisitorTab gate={gate} headers={headers} isOnline={isOnline} onVerified={() => {}} />}
         {tab === "walkin"  && <WalkInTab  gate={gate} headers={headers} isOnline={isOnline} merchants={merchants} />}
         {tab === "exit" && <ExitTab gate={gate} headers={headers} isOnline={isOnline} onExited={() => {}} />}
+        {tab === "history" && <HistoryTab events={events} onRefresh={() => loadEvents(evtPage)} decisionClass={decisionClass} />}
       </div>
       <WalkieReceiver socket={walkieSocket} userName={session.user.name} />
     </div>
