@@ -65,6 +65,13 @@
   grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
 }
 
+.access-history-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  padding: 24px 26px 28px;
+}
+
 .access-workspace {
   padding: 24px 26px 28px;
 }

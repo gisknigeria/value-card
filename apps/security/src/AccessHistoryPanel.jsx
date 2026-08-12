@@ -50,7 +50,7 @@ export default function AccessHistoryPanel({ session, onClose }) {
           <button className="access-close" onClick={onClose} aria-label="Close history"><MdClose /></button>
         </header>
 
-        <div className="access-body">
+        <div className="access-history-body">
           <div className="access-history-title">
             <MdHistory />
             <div>
