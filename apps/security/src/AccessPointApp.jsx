@@ -3,7 +3,7 @@
  * No map. Shows: QR scan, visitor code, walk-in guest logger, exit code verifier.
  * GPS shares automatically on mount.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   MdBadge, MdCameraAlt, MdClose, MdConfirmationNumber, MdHistory,
   MdImage, MdKeyboard, MdLogin, MdLogout, MdNote, MdPerson,
@@ -70,6 +70,8 @@ export default function AccessPointApp({ session, onLogout }) {
   const [totalEvents, setTotalEvents] = useState(0);
   const [sosConfirm, setSosConfirm] = useState(false);
   const [sosStatus, setSosStatus] = useState("");
+  const headers = useMemo(() => ({ Authorization: `Bearer ${session.token}`, "Content-Type": "application/json" }), [session.token]);
+  const decisionClass = (d = "") => (d === "ALLOWED" || d === "OVERRIDE_ALLOWED") ? "allowed" : "denied";
 
   // GPS auto-share
   const socketRef = useRef(null);
@@ -85,9 +87,6 @@ export default function AccessPointApp({ session, onLogout }) {
   const [sharingCamera, setSharingCamera] = useState(false);
   const cameraStreamRef = useRef(null);
   const cameraPeersRef = useRef({});
-
-  const headers = { Authorization: `Bearer ${session.token}`, "Content-Type": "application/json" };
-  const decisionClass = (d = "") => (d === "ALLOWED" || d === "OVERRIDE_ALLOWED") ? "allowed" : "denied";
 
   // ── Online/offline ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -248,7 +247,7 @@ export default function AccessPointApp({ session, onLogout }) {
     fetch(`${API}/merchants/list`, { headers })
       .then(r => r.json()).then(d => setMerchants(d.merchants || []))
       .catch(() => {});
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [headers]);
 
   const loadEvents = useCallback(async (page = 0) => {
     try {
