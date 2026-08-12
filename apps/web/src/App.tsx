@@ -353,12 +353,7 @@ function Overview({ setView, resident, dashboard }: { setView: (v: View) => void
 
   return (
     <div className="page-content">
-      <section className="overview-card-lead">
-        <div className="overview-card-copy">
-          <span className="eyebrow">Digital membership</span>
-          <h2>Your Value Card stays private</h2>
-          <p>Open it only when you need to present it to an approved merchant or security officer.</p>
-        </div>
+      <section className="overview-card-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
         <button className="primary-button" type="button" onClick={() => setShowCardPreview(true)}>
           <Eye size={17} /> View my card
         </button>
