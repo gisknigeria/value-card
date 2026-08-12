@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { MdClose, MdHistory, MdLogin, MdLogout, MdRefresh, MdFilterList } from "react-icons/md";
 
 const API = "/api";
@@ -12,10 +12,10 @@ export default function AccessHistoryPanel({ session, onClose }) {
   const [showFilters, setShowFilters] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const headers = { Authorization: `Bearer ${session.token}`, "Content-Type": "application/json" };
+  const headers = useMemo(() => ({ Authorization: `Bearer ${session.token}`, "Content-Type": "application/json" }), [session.token]);
   const PAGE_SIZE = 12;
 
-  const loadEvents = useCallback(async (page = 0) => {
+  const loadEvents = useCallback(async (page) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) });
@@ -26,7 +26,6 @@ export default function AccessHistoryPanel({ session, onClose }) {
       const data = await response.json();
       setEvents(data.events ?? data);
       setTotal(data.total ?? 0);
-      setEvtPage(page);
     } catch {
       // ignore
     } finally {
@@ -34,7 +33,7 @@ export default function AccessHistoryPanel({ session, onClose }) {
     }
   }, [filterGate, filterDecision, headers]);
 
-  useEffect(() => { loadEvents(0); }, [loadEvents]);
+  useEffect(() => { loadEvents(evtPage); }, [loadEvents, evtPage]);
 
   const decisionClass = (d = "") => (d === "ALLOWED" || d === "OVERRIDE_ALLOWED") ? "allowed" : "denied";
 
@@ -112,13 +111,13 @@ export default function AccessHistoryPanel({ session, onClose }) {
 
           {total > PAGE_SIZE && (
             <div className="access-pagination">
-              <button disabled={evtPage === 0} onClick={() => loadEvents(evtPage - 1)}>← Previous</button>
+              <button disabled={evtPage === 0} onClick={() => setEvtPage(evtPage - 1)}>← Previous</button>
               <span>{evtPage * PAGE_SIZE + 1}–{Math.min((evtPage + 1) * PAGE_SIZE, total)} of {total}</span>
-              <button disabled={(evtPage + 1) * PAGE_SIZE >= total} onClick={() => loadEvents(evtPage + 1)}>Next →</button>
+              <button disabled={(evtPage + 1) * PAGE_SIZE >= total} onClick={() => setEvtPage(evtPage + 1)}>Next →</button>
             </div>
           )}
 
-          <button className="access-refresh-btn" onClick={() => loadEvents(0)} title="Refresh events">
+          <button className="access-refresh-btn" onClick={() => loadEvents(evtPage)} title="Refresh events">
             <MdRefresh /> Refresh
           </button>
         </div>
