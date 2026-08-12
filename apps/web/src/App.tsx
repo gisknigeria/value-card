@@ -317,16 +317,35 @@ function Overview({ setView, resident, dashboard }: { setView: (v: View) => void
   const offers = dashboard?.offers.slice(0, 3) ?? [];
   const activity = dashboard?.recentActivity.slice(0, 2) ?? [];
   const [showCardPreview, setShowCardPreview] = useState(false);
+  const dialogRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!showCardPreview) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+
+    // Try to open fullscreen on the dialog and lock orientation where supported.
+    const openFullscreen = async () => {
+      try {
+        const el = dialogRef.current as any;
+        if (el?.requestFullscreen) await el.requestFullscreen();
+        else if (document.documentElement?.requestFullscreen) await document.documentElement.requestFullscreen();
+        try { await (screen as any).orientation?.lock?.('portrait-primary'); } catch { /* ignore */ }
+      } catch { /* ignore fullscreen errors */ }
+    };
+    // Small delay so layout finishes before requesting fullscreen on some browsers
+    const fsTimer = window.setTimeout(openFullscreen, 50);
+
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setShowCardPreview(false);
     };
     window.addEventListener('keydown', closeOnEscape);
+
     return () => {
+      window.clearTimeout(fsTimer);
+      // Exit fullscreen and unlock orientation when closing the preview
+      try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch {}
+      try { (screen as any).orientation?.unlock?.(); } catch {}
       document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', closeOnEscape);
     };
@@ -364,7 +383,7 @@ function Overview({ setView, resident, dashboard }: { setView: (v: View) => void
       {showCardPreview && (
         <div className="overview-card-modal" role="dialog" aria-modal="true" aria-labelledby="overview-card-title">
           <button className="overview-card-backdrop" type="button" aria-label="Close card preview" onClick={() => setShowCardPreview(false)} />
-          <section className="overview-card-dialog">
+          <section className="overview-card-dialog" ref={el => { dialogRef.current = el as any; }}>
             <div className="overview-card-dialog-head">
               <div><span className="eyebrow">Private preview</span><h2 id="overview-card-title">My Value Card</h2></div>
               <button className="icon-button" type="button" onClick={() => setShowCardPreview(false)} aria-label="Close card preview"><X size={20} /></button>
