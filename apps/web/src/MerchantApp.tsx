@@ -29,6 +29,7 @@ import {
   Tag,
   Trash2,
   UserRound,
+  X,
   Users,
   XCircle,
   ZapOff,
@@ -1467,7 +1468,7 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
           </button>
         </div>
 
-        {view === 'overview'     && <><RoleAccessCard mu={mu} token={session.accessToken} lead /><MerchantOverview m={m} isApproved={isApproved} isOwner={isOwner} setView={setView} pendingWalkIns={pendingWalkIns} /></>}
+        {view === 'overview'     && <><RoleAccessCard mu={mu} token={session.accessToken} lead /><MerchantOverview mu={mu} m={m} isApproved={isApproved} isOwner={isOwner} setView={setView} pendingWalkIns={pendingWalkIns} /></>}
         {view === 'card'         && <RoleAccessCard mu={mu} token={session.accessToken} />}
         {view === 'benefits'     && <PersonalBenefits data={mu.user.resident?.approvalStatus === 'APPROVED' ? memberData : null} />}
         {view === 'activity'     && <PersonalActivity data={mu.user.resident?.approvalStatus === 'APPROVED' ? memberData : null} />}
@@ -1710,13 +1711,46 @@ function MerchantNotifications({ token, items, setItems, setUnreadCount }: {
 }
 
 // ── Overview panel ────────────────────────────────────────────────────
-function MerchantOverview({ m, isApproved, isOwner, setView, pendingWalkIns }: {
+function MerchantOverview({ m, mu, isApproved, isOwner, setView, pendingWalkIns }: {
   m: MerchantUserProfile['merchant'];
+  mu: MerchantUserProfile;
   isApproved: boolean;
   isOwner: boolean;
   setView: (v: MerchantView) => void;
   pendingWalkIns: number;
 }) {
+  const [showCardPreview, setShowCardPreview] = useState(false);
+  const dialogRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!showCardPreview) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const openFullscreen = async () => {
+      try {
+        const el = dialogRef.current as any;
+        if (el?.requestFullscreen) await el.requestFullscreen();
+        else if (document.documentElement?.requestFullscreen) await document.documentElement.requestFullscreen();
+        try { await (screen as any).orientation?.lock?.('portrait-primary'); } catch { }
+      } catch { }
+    };
+
+    const fsTimer = window.setTimeout(openFullscreen, 50);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowCardPreview(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+
+    return () => {
+      window.clearTimeout(fsTimer);
+      try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch {}
+      try { (screen as any).orientation?.unlock?.(); } catch {}
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [showCardPreview]);
+
   const summaryItems = [
     { title: 'Residents scanned', value: '124', subtitle: 'Verified cardholders this month', icon: ShieldCheck, tone: 'primary' },
     { title: 'Transactions', value: '18', subtitle: 'Benefit entries logged', icon: RefreshCw, tone: 'success' },
@@ -1734,7 +1768,7 @@ function MerchantOverview({ m, isApproved, isOwner, setView, pendingWalkIns }: {
             Your account is an identity and gate-access account for {m.businessName}. Scanning resident cards
             and merchant operations are restricted by your assigned role.
           </p>
-          <button className="primary-button" onClick={() => setView('card')} style={{ marginTop: 10 }}>
+          <button className="primary-button" onClick={() => setShowCardPreview(true)} style={{ marginTop: 10 }}>
             <QrCode size={16} /> View my entry card
           </button>
         </div>
@@ -1760,6 +1794,9 @@ function MerchantOverview({ m, isApproved, isOwner, setView, pendingWalkIns }: {
               <p>Monitor scans, walk-ins, and benefit activity from one focused workspace designed for fast decisions on the go.</p>
             </div>
             <div className="merchant-hero-actions">
+              <button className="secondary-button" onClick={() => setShowCardPreview(true)}>
+                <QrCode size={16} /> View my entry card
+              </button>
               <button className="secondary-button" onClick={() => setView('scan')}>
                 <ShieldCheck size={16} /> Scan resident
               </button>
@@ -1847,6 +1884,47 @@ function MerchantOverview({ m, isApproved, isOwner, setView, pendingWalkIns }: {
             </button>
           </div>
         </>
+      )}
+
+      {showCardPreview && (
+        <div className="overview-card-modal" role="dialog" aria-modal="true" aria-labelledby="merchant-card-preview-title">
+          <button className="overview-card-backdrop" type="button" aria-label="Close card preview" onClick={() => setShowCardPreview(false)} />
+          <section className="overview-card-dialog" ref={el => { dialogRef.current = el as any; }}>
+            <div className="overview-card-dialog-head">
+              <div><span className="eyebrow">Private preview</span><h2 id="merchant-card-preview-title">My entry card</h2></div>
+              <button className="icon-button" type="button" onClick={() => setShowCardPreview(false)} aria-label="Close card preview"><X size={20} /></button>
+            </div>
+            <div className="overview-card-dialog-body">
+              <section className={`role-card-shell role-card-merchant role-card-merchant-${mu.role.toLowerCase()} admin-workspace`} style={{ padding: 24, maxWidth: 560, width: '100%' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div className="role-card-details">
+                    <small style={{ color: 'var(--muted)', fontWeight: 800 }}>BERA · BODIJA VALUE CARD</small>
+                    <h2 style={{ margin: '8px 0 4px' }}>{mu.user.displayName || (mu.role === 'OWNER' ? mu.merchant.contactPerson : 'Merchant staff')}</h2>
+                    <p style={{ margin: 0, color: 'var(--muted)' }}>
+                      {mu.role === 'OWNER' ? 'Merchant administrator' : mu.role === 'POS' ? 'Point-of-sale staff' : 'Regular staff'} · {mu.merchant.businessName}
+                    </p>
+                    <strong style={{ display: 'block', marginTop: 18 }}>{mu.user.accessCard?.cardNumber || 'Awaiting association approval'}</strong>
+                    <span className={`dependant-status-badge ${mu.user.accessCard?.status === 'ACTIVE' ? 'status-approved' : 'status-pending'}`} style={{ marginTop: 8 }}>
+                      {mu.user.accessCard?.status?.toLowerCase().replace(/_/g, ' ') || 'pending approval'}
+                    </span>
+                  </div>
+                  <div className="role-card-qr" style={{ minWidth: 156, minHeight: 156 }}>
+                    {mu.user.accessCard ? <EncryptedQRCode token={mu.user.accessCard.qrToken} size={128} bgColor="#ffffff" fgColor="#073f37" /> : <QrCode size={64} />}
+                  </div>
+                </div>
+                <p style={{ margin: '20px 0 0', color: 'var(--muted)', fontSize: 12 }}>
+                  {mu.user.accessCard
+                    ? 'Use this personal benefit card at participating merchants and present it for gate identification.'
+                    : `Your QR code and card will appear after ${mu.merchant.associationName || 'your association'} confirms your profile.`}
+                </p>
+              </section>
+            </div>
+            <div className="overview-card-dialog-actions">
+              <button className="secondary-button" type="button" onClick={() => setShowCardPreview(false)}>Cancel</button>
+              <button className="primary-button" type="button" onClick={() => { setShowCardPreview(false); setView('card'); }}>Open card page</button>
+            </div>
+          </section>
+        </div>
       )}
     </section>
   );

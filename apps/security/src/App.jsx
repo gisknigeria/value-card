@@ -5314,13 +5314,7 @@ function Dashboard({ session, onLogout }) {
         style={{ "--sidebar-width": `${sidebarWidth}px` }}
       >
         <div className="sidebar-brand">
-          <div className="brand-small">
-            <div className="crest mini eye-logo">S</div>
-            <div>
-              <b>SIGAR</b>
-              <span>Bodija Community</span>
-            </div>
-          </div>
+          
           <button
             className="mobile-close"
             onClick={() => setOperationsOpen(false)}
