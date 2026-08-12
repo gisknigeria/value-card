@@ -7,7 +7,6 @@ import {
   Camera,
   CheckCircle2,
   Clock3,
-  Download,
   Eye,
   EyeOff,
   KeyRound,
@@ -1492,7 +1491,6 @@ function RoleAccessCard({ mu, token, lead = false }: { mu: MerchantUserProfile; 
   const name = mu.user.displayName || (mu.role === 'OWNER' ? mu.merchant.contactPerson : 'Merchant staff');
   const cardRef = useRef<HTMLDivElement>(null);
 
-  const [downloading, setDownloading] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
   const [deactivateError, setDeactivateError] = useState('');
   const [showMisuseModal, setShowMisuseModal] = useState(false);
@@ -1500,19 +1498,6 @@ function RoleAccessCard({ mu, token, lead = false }: { mu: MerchantUserProfile; 
   const [reportingMisuse, setReportingMisuse] = useState(false);
   const [misuseError, setMisuseError] = useState('');
   const [misuseSuccess, setMisuseSuccess] = useState('');
-
-  const downloadCard = async () => {
-    if (!cardRef.current || !rawCard) return;
-    setDownloading(true);
-    try {
-      const { default: html2canvas } = await import('html2canvas');
-      const canvas = await html2canvas(cardRef.current, { scale: 3, backgroundColor: '#073f37', useCORS: true });
-      const link = document.createElement('a');
-      link.download = `bodija-access-card-${rawCard.cardNumber}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-    } finally { setDownloading(false); }
-  };
 
   const handleDeactivate = async () => {
     if (!window.confirm('Deactivate your card? This will immediately block gate access. Contact BERA support to reactivate it.')) return;
@@ -1565,9 +1550,6 @@ function RoleAccessCard({ mu, token, lead = false }: { mu: MerchantUserProfile; 
             : `Your QR code and card will appear after ${mu.merchant.associationName || 'your association'} confirms your profile.`}
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          <button className="outline-button" type="button" onClick={() => void downloadCard()} disabled={!rawCard || downloading}>
-            <Download size={16} /> {downloading ? <div className="loading-spinner" /> : 'Download card'}
-          </button>
           {rawCard && rawCard.status !== 'SUSPENDED' && (
             <button
               className="outline-button" type="button"

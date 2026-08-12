@@ -20,9 +20,50 @@ const LEDGER_REVERSAL = 'REVERSAL';
 export class TransactionsService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
+  // Try to decrypt an encrypted QR payload produced by our scanner apps.
+  // Returns the decrypted plain token on success, or the original input on failure.
+  private tryDecryptQrPayload(raw?: string) {
+    const s = String(raw || '').trim();
+    if (!s) return s;
+    // Preserve legacy tokens
+    if (s.startsWith('BVC-')) return s;
+    const OLD_PREFIX = 'https://bvc-id.ng/v/';
+    const payload = s.startsWith(OLD_PREFIX) ? s.slice(OLD_PREFIX.length) : s;
+    if (payload.startsWith('BVC-')) return payload;
+
+    try {
+      // base64url -> base64
+      const padded = payload.replace(/-/g, '+').replace(/_/g, '/');
+      const padLen = (4 - (padded.length % 4)) % 4;
+      const base64 = padded + '='.repeat(padLen);
+      const combined = Buffer.from(base64, 'base64');
+      if (combined.length <= 12 + 16) return s;
+      const iv = combined.slice(0, 12);
+      const cipherPlusTag = combined.slice(12);
+
+      const secret = process.env.QR_SECRET || 'BVC-QR-SECRET-2026-CHANGE-ME-IN-PRODUCTION';
+      // Derive 32-byte key from secret
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const crypto = require('crypto');
+      const key = crypto.createHash('sha256').update(secret).digest();
+
+      const authTag = cipherPlusTag.slice(cipherPlusTag.length - 16);
+      const ciphertext = cipherPlusTag.slice(0, cipherPlusTag.length - 16);
+      const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+      decipher.setAuthTag(authTag);
+      const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+      return decrypted.toString('utf8');
+    } catch (e) {
+      return s;
+    }
+  }
+
   private async resolveBenefitCard(token: string) {
+    const resolved = this.tryDecryptQrPayload(token);
+    const candidates = Array.from(new Set([resolved, token]));
+
     const primary = await this.prisma.card.findFirst({
-      where: { OR: [{ qrToken: token }, { membershipId: token }] },
+      where: { OR: [{ qrToken: { in: candidates } }, { membershipId: { in: candidates } }] },
       include: {
         resident: {
           select: {
@@ -46,7 +87,7 @@ export class TransactionsService {
       };
     }
     const family = await this.prisma.dependant.findFirst({
-      where: { OR: [{ qrToken: token }, { membershipId: token }] },
+      where: { OR: [{ qrToken: { in: candidates } }, { membershipId: { in: candidates } }] },
       include: { resident: { select: { id: true, neighbourhood: true } } },
     });
     if (!family) return null;
