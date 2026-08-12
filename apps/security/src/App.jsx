@@ -5,6 +5,7 @@ import { io } from "socket.io-client";
 import Hls from "hls.js";
 import shp from "shpjs";
 import AccessScanner from "./AccessScanner.jsx";
+import AccessHistoryPanel from "./AccessHistoryPanel.jsx";
 import WalkieTalkie from "./WalkieTalkie.jsx";
 import WalkieReceiver from "./WalkieReceiver.jsx";
 import "./resident-search.css";
@@ -72,6 +73,7 @@ import {
   MdAccessible,
   MdRecycling,
   MdQrCodeScanner,
+  MdHistory,
   MdPolyline,
   MdHexagon,
   MdPersonAdd,
@@ -3742,6 +3744,7 @@ function Dashboard({ session, onLogout }) {
   const [accessPanel, setAccessPanel] = useState(false);
   const [walkInPanel, setWalkInPanel] = useState(false);
   const [walkInMerchants, setWalkInMerchants] = useState([]);
+  const [accessHistoryOpen, setAccessHistoryOpen] = useState(false);
   const [phoneShares, setPhoneShares] = useState([]);
   const [remoteStreams, setRemoteStreams] = useState({});
   const [sharingCamera, setSharingCamera] = useState(false);
@@ -5424,6 +5427,9 @@ function Dashboard({ session, onLogout }) {
               <button onClick={() => setAccessPanel(true)}>
                 <MdQrCodeScanner /> Gate Scan
               </button>
+              <button onClick={() => setAccessHistoryOpen(true)}>
+                <MdHistory /> Gate history
+              </button>
               {canAdmin && (
                 <button
                   className="amber"
@@ -6187,6 +6193,12 @@ function Dashboard({ session, onLogout }) {
         <AccessScanner
           session={session}
           onClose={() => setAccessPanel(false)}
+        />
+      )}
+      {accessHistoryOpen && (
+        <AccessHistoryPanel
+          session={session}
+          onClose={() => setAccessHistoryOpen(false)}
         />
       )}
       {walkInPanel && (
