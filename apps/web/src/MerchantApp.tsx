@@ -1395,7 +1395,7 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
       </aside>
 
       <header className="portal-mobile-header">
-        <MerchantBrand />
+        <strong className="merchant-mobile-name">{m.businessName}</strong>
         <div className="portal-mobile-actions">
           <button onClick={() => setView('notifications')} aria-label="Notifications"><Bell size={18} />{unreadCount > 0 && <em>{unreadCount}</em>}</button>
           <button onClick={logout} aria-label="Sign out"><LogOut size={18} /></button>
@@ -1403,18 +1403,6 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
       </header>
 
       <main className="admin-main portal-content">
-        <section className="admin-title">
-          <div>
-            <span>Merchant portal</span>
-            <h1>{m.businessName}</h1>
-            <p>{m.category} · {m.location}</p>
-          </div>
-          <div className="admin-live">
-            <i style={{ background: isApproved ? '#4e936d' : '#c49a54' }} />
-            {isApproved ? 'Active merchant' : m.approvalStatus.toLowerCase()}
-          </div>
-        </section>
-
         <ApprovalBanner mu={mu} />
 
         {/* Section tabs */}
