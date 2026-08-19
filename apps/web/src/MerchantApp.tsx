@@ -36,6 +36,7 @@ import {
   Flag,
 } from 'lucide-react';
 import EncryptedQRCode from './EncryptedQRCode';
+import AuthScreen from './AuthScreen';
 import {
   registerMerchant,
   loginMerchant,
@@ -2158,7 +2159,12 @@ export default function MerchantApp() {
 
   if (session) return <MerchantDashboard session={session} logout={logout} />;
 
-  return authMode === 'login'
-    ? <MerchantLogin onSwitch={() => setAuthMode('register')} onAuth={auth} />
-    : <MerchantRegister onSwitch={() => setAuthMode('login')} onAuth={auth} />;
+  return <AuthScreen
+    onAuthenticated={nextSession => {
+      localStorage.setItem('bodija-resident-token', nextSession.accessToken);
+      window.location.assign('/');
+    }}
+    onMerchantAuthenticated={auth}
+    defaultRole="merchant"
+  />;
 }

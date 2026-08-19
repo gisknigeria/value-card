@@ -5,22 +5,28 @@ import {
   Eye,
   EyeOff,
   LockKeyhole,
+  MapPin,
   Phone,
+  Store,
   UserRound,
   Users,
   TicketCheck,
 } from 'lucide-react';
-import { getRegistrationSticker, loginAdmin, loginResident, registerResident, type AuthSession, type RegistrationSticker } from './api';
+import { getRegistrationSticker, loginAdmin, loginMerchant, loginResident, registerMerchant, registerResident, type AuthSession, type MerchantSession, type RegistrationSticker } from './api';
 
 type Mode = 'login' | 'register';
+type Role = 'resident' | 'merchant';
 
 interface AuthScreenProps {
   onAuthenticated: (session: AuthSession) => void;
+  onMerchantAuthenticated?: (session: MerchantSession) => void;
+  defaultRole?: Role;
 }
 
-export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
+export default function AuthScreen({ onAuthenticated, onMerchantAuthenticated, defaultRole = 'resident' }: AuthScreenProps) {
   const stickerFromQr = new URLSearchParams(window.location.search).get('sticker') || '';
   const [mode, setMode] = useState<Mode>(stickerFromQr ? 'register' : 'login');
+  const [role, setRole] = useState<Role>(stickerFromQr ? 'resident' : defaultRole);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -37,6 +43,11 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     registrationType: 'INDIVIDUAL' as 'INDIVIDUAL' | 'FAMILY',
     householdRole: 'TENANT' as 'TENANT' | 'LANDLORD' | 'AGENT',
     consent: false,
+    businessName: '',
+    category: '',
+    contactPerson: '',
+    location: '',
+    associationName: '',
   });
   const [familyMembers, setFamilyMembers] = useState([
     { fullName: '', relationship: '', phone: '', dateOfBirth: '', isMinor: false },
@@ -76,6 +87,11 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
 
     try {
       if (mode === 'login') {
+        if (role === 'merchant') {
+          if (!onMerchantAuthenticated) throw new Error('Merchant access is unavailable');
+          onMerchantAuthenticated(await loginMerchant(form.email || form.phone, form.password));
+          return;
+        }
         try {
           const session = await loginResident(form.email || form.phone, form.password);
           onAuthenticated(session);
@@ -90,6 +106,23 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             throw residentError;
           }
         }
+      }
+
+      if (role === 'merchant') {
+        if (!onMerchantAuthenticated) throw new Error('Merchant access is unavailable');
+        onMerchantAuthenticated(await registerMerchant({
+          businessName: form.businessName,
+          category: form.category,
+          contactPerson: form.contactPerson,
+          phone: form.phone,
+          email: form.email || undefined,
+          location: form.location,
+          streetName: form.streetName,
+          associationName: form.associationName,
+          password: form.password,
+          consent: form.consent,
+        }));
+        return;
       }
 
       const session = await registerResident({
@@ -144,12 +177,17 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             <div><strong>Bodija</strong><small>Value Card</small></div>
           </div>
           <div className="auth-heading">
-            <div className="portal-role-lockup resident-role">
-              <small>Resident access</small>
-              <strong>RESIDENT PORTAL</strong>
+            <div className={`portal-role-lockup ${role === 'resident' ? 'resident-role' : 'merchant-role'}`}>
+              <small>{role === 'resident' ? 'Resident access' : 'Business access'}</small>
+              <strong>{role === 'resident' ? 'RESIDENT PORTAL' : 'MERCHANT PORTAL'}</strong>
             </div>
-          <h2>{mode === 'login' ? 'Welcome back' : 'Create your resident account'}</h2>
-            <p>{mode === 'login' ? 'Sign in with your email address or phone number.' : 'Use the code on the community sticker issued for your street.'}</p>
+            <h2>{mode === 'login' ? 'Welcome back' : role === 'resident' ? 'Create your resident account' : 'Register your business'}</h2>
+            <p>{mode === 'login' ? 'Sign in with your email address or phone number.' : role === 'resident' ? 'Use the code on the community sticker issued for your street.' : 'Your application will be reviewed by BERA before going live.'}</p>
+          </div>
+
+          <div className="auth-tabs" role="tablist" aria-label="Account type">
+            <button type="button" className={role === 'resident' ? 'active' : ''} onClick={() => { setRole('resident'); setError(''); }}>Resident</button>
+            <button type="button" className={role === 'merchant' ? 'active' : ''} onClick={() => { setRole('merchant'); setError(''); }}>Merchant</button>
           </div>
 
           <div className="auth-tabs" role="tablist" aria-label="Account action">
@@ -158,7 +196,7 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
           </div>
 
           <form className="auth-form" onSubmit={submit}>
-            {mode === 'register' && (
+            {mode === 'register' && role === 'resident' && (
               <>
                 <label>
                   <span>Community sticker code</span>
@@ -217,6 +255,21 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
               </>
             )}
 
+            {mode === 'register' && role === 'merchant' && (
+              <>
+                <label><span>Business name</span><div className="auth-input"><Store size={18} /><input required value={form.businessName} onChange={event => update('businessName', event.target.value)} placeholder="e.g. Cedar Pharmacy" /></div></label>
+                <div className="auth-field-row">
+                  <label><span>Category</span><div className="auth-input"><Store size={18} /><input required value={form.category} onChange={event => update('category', event.target.value)} placeholder="e.g. Pharmacy" /></div></label>
+                  <label><span>Contact person</span><div className="auth-input"><UserRound size={18} /><input required value={form.contactPerson} onChange={event => update('contactPerson', event.target.value)} placeholder="Full name" /></div></label>
+                </div>
+                <label><span>Location / service area</span><div className="auth-input"><MapPin size={18} /><input required value={form.location} onChange={event => update('location', event.target.value)} placeholder="e.g. Awolowo Avenue, Bodija" /></div></label>
+                <div className="auth-field-row">
+                  <label><span>Business street</span><div className="auth-input"><MapPin size={18} /><input required value={form.streetName} onChange={event => update('streetName', event.target.value)} placeholder="Street name" /></div></label>
+                  <label><span>Association</span><div className="auth-input"><MapPin size={18} /><input required value={form.associationName} onChange={event => update('associationName', event.target.value)} placeholder="Association name" /></div></label>
+                </div>
+              </>
+            )}
+
             <label>
               <span>{mode === 'login' ? 'Email or phone number' : 'Email address (optional)'}</span>
               <div className="auth-input"><UserRound size={18} /><input required={mode === 'login'} autoComplete="email" value={form.email} onChange={event => update('email', event.target.value)} placeholder={mode === 'login' ? 'you@example.com or 0803...' : 'you@example.com'} /></div>
@@ -245,7 +298,7 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             </button>
           </form>
 
-          {mode === 'login' && <p className="demo-login">Demo: <strong>tolulope.adeyemi@example.com</strong> / <strong>resident123</strong></p>}
+          {mode === 'login' && role === 'resident' && <p className="demo-login">Demo: <strong>tolulope.adeyemi@example.com</strong> / <strong>resident123</strong></p>}
         </div>
       </section>
     </main>

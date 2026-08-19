@@ -1571,5 +1571,11 @@ export default function App() {
     return <div className="session-loading"><LoadingSpinner /></div>;
   }
 
-  return session ? <ResidentPortal session={session} logout={logout} /> : <AuthScreen onAuthenticated={authenticated} />;
+  return session ? <ResidentPortal session={session} logout={logout} /> : <AuthScreen
+    onAuthenticated={authenticated}
+    onMerchantAuthenticated={nextSession => {
+      localStorage.setItem('bodija-merchant-token', nextSession.accessToken);
+      window.location.assign('/merchant');
+    }}
+  />;
 }
