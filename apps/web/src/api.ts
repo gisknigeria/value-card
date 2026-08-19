@@ -273,6 +273,17 @@ export function loginResident(identifier: string, password: string) {
   });
 }
 
+export type PortalSession =
+  | (AuthSession & { accountRole: 'RESIDENT' })
+  | (MerchantSession & { accountRole: 'MERCHANT' });
+
+export function loginPortal(identifier: string, password: string) {
+  return apiRequest<PortalSession>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ identifier, password }),
+  });
+}
+
 export interface AdminIdentityFull {
   id: string;
   email: string | null;

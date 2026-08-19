@@ -5,13 +5,14 @@ import { PrismaModule } from '../prisma/prisma.module';
 import {
   MerchantAuthController,
   AdminMerchantController,
+  PortalAuthController,
 } from './merchant-auth.controller';
 import { MerchantAuthService } from './merchant-auth.service';
 import { MerchantGuard } from './merchant.guard';
 
 @Module({
   imports: [AuthModule, AdminModule, PrismaModule],
-  controllers: [MerchantAuthController, AdminMerchantController],
+  controllers: [PortalAuthController, MerchantAuthController, AdminMerchantController],
   providers: [MerchantAuthService, MerchantGuard],
   exports: [MerchantGuard, MerchantAuthService],
 })

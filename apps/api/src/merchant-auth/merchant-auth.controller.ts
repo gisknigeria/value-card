@@ -14,6 +14,8 @@ import {
 import { ApprovalStatus } from '@prisma/client';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AuthService } from '../auth/auth.service';
+import { LoginDto } from '../auth/dto/login.dto';
 import { AdminGuard } from '../admin/admin.guard';
 import { MerchantGuard } from './merchant.guard';
 import { MerchantAuthService } from './merchant-auth.service';
@@ -26,6 +28,27 @@ import { UpdateMerchantStatusDto } from './dto/update-merchant-status.dto';
 type AuthRequest = Request & {
   user: { userId: string; role: string; merchantId?: string; merchantRole?: string };
 };
+
+// A single public login endpoint for both resident and merchant accounts.
+// The credentials determine the role; the client never asks the user to choose it.
+@Controller('auth')
+export class PortalAuthController {
+  constructor(
+    @Inject(AuthService) private readonly residentAuth: AuthService,
+    @Inject(MerchantAuthService) private readonly merchantAuth: MerchantAuthService,
+  ) {}
+
+  @Post('login')
+  async login(@Body() body: LoginDto) {
+    try {
+      const session = await this.residentAuth.login(body);
+      return { accountRole: 'RESIDENT' as const, ...session };
+    } catch {
+      const session = await this.merchantAuth.login(body);
+      return { accountRole: 'MERCHANT' as const, ...session };
+    }
+  }
+}
 
 // ── Public merchant auth routes ───────────────────────────────────────
 @Controller('merchant-auth')

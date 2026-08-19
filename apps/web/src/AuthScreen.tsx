@@ -12,7 +12,7 @@ import {
   Users,
   TicketCheck,
 } from 'lucide-react';
-import { getRegistrationSticker, loginAdmin, loginMerchant, loginResident, registerMerchant, registerResident, type AuthSession, type MerchantSession, type RegistrationSticker } from './api';
+import { getRegistrationSticker, loginPortal, registerMerchant, registerResident, type AuthSession, type MerchantSession, type RegistrationSticker } from './api';
 
 type Mode = 'login' | 'register';
 type Role = 'resident' | 'merchant';
@@ -87,25 +87,14 @@ export default function AuthScreen({ onAuthenticated, onMerchantAuthenticated, d
 
     try {
       if (mode === 'login') {
-        if (role === 'merchant') {
+        const session = await loginPortal(form.email || form.phone, form.password);
+        if (session.accountRole === 'MERCHANT') {
           if (!onMerchantAuthenticated) throw new Error('Merchant access is unavailable');
-          onMerchantAuthenticated(await loginMerchant(form.email || form.phone, form.password));
+          onMerchantAuthenticated(session);
           return;
         }
-        try {
-          const session = await loginResident(form.email || form.phone, form.password);
-          onAuthenticated(session);
-          return;
-        } catch (residentError) {
-          try {
-            const adminSession = await loginAdmin(form.email || form.phone, form.password);
-            localStorage.setItem('bodija-admin-token', adminSession.accessToken);
-            window.location.assign('/admin');
-            return;
-          } catch {
-            throw residentError;
-          }
-        }
+        onAuthenticated(session);
+        return;
       }
 
       if (role === 'merchant') {
@@ -159,9 +148,9 @@ export default function AuthScreen({ onAuthenticated, onMerchantAuthenticated, d
           <div><strong>Bodija</strong><small>Value Card</small></div>
         </div>
         <div className="auth-message">
-          <span className="auth-kicker">Bodija resident membership</span>
+          <span className="auth-kicker">Bodija community membership</span>
           <h1>One verified card for everyday community benefits.</h1>
-          <p>Access approved merchant offers and carry a secure resident identity that can be verified at community gates.</p>
+          <p>Residents and merchants use one secure account entry point for community identity and benefits.</p>
         </div>
         <div className="auth-trust">
           <span><CheckCircle2 size={17} /> Private resident profile</span>
@@ -177,24 +166,22 @@ export default function AuthScreen({ onAuthenticated, onMerchantAuthenticated, d
             <div><strong>Bodija</strong><small>Value Card</small></div>
           </div>
           <div className="auth-heading">
-            <div className={`portal-role-lockup ${role === 'resident' ? 'resident-role' : 'merchant-role'}`}>
-              <small>{role === 'resident' ? 'Resident access' : 'Business access'}</small>
-              <strong>{role === 'resident' ? 'RESIDENT PORTAL' : 'MERCHANT PORTAL'}</strong>
-            </div>
             <h2>{mode === 'login' ? 'Welcome back' : role === 'resident' ? 'Create your resident account' : 'Register your business'}</h2>
-            <p>{mode === 'login' ? 'Sign in with your email address or phone number.' : role === 'resident' ? 'Use the code on the community sticker issued for your street.' : 'Your application will be reviewed by BERA before going live.'}</p>
+            <p>{mode === 'login' ? 'Sign in with your email address or phone number. We will take you to the correct portal.' : role === 'resident' ? 'Use the code on the community sticker issued for your street.' : 'Your application will be reviewed by BERA before going live.'}</p>
           </div>
 
-          <label className="auth-account-type">
-            <span>Continue as</span>
-            <div className="auth-input">
-              <UserRound size={18} />
-              <select value={role} onChange={event => { setRole(event.target.value as Role); setError(''); }}>
-                <option value="resident">Resident</option>
-                <option value="merchant">Merchant</option>
-              </select>
-            </div>
-          </label>
+          {mode === 'register' && (
+            <label className="auth-account-type">
+              <span>Register as</span>
+              <div className="auth-input">
+                <UserRound size={18} />
+                <select value={role} onChange={event => { setRole(event.target.value as Role); setError(''); }}>
+                  <option value="resident">Resident</option>
+                  <option value="merchant">Merchant</option>
+                </select>
+              </div>
+            </label>
+          )}
 
           <div className="auth-tabs" role="tablist" aria-label="Account action">
             <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => changeMode('login')}>Sign in</button>
@@ -304,7 +291,7 @@ export default function AuthScreen({ onAuthenticated, onMerchantAuthenticated, d
             </button>
           </form>
 
-          {mode === 'login' && role === 'resident' && <p className="demo-login">Demo: <strong>tolulope.adeyemi@example.com</strong> / <strong>resident123</strong></p>}
+          {mode === 'login' && <p className="demo-login">Your account type is detected automatically after sign in.</p>}
         </div>
       </section>
     </main>
