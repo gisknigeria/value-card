@@ -1539,7 +1539,7 @@ function StickerExportsPanel({ token }: { token: string }) {
         <label className="sticker-select">{status !== 'CLAIMED' && <input type="checkbox" checked={selected.includes(sticker.id)} onChange={() => toggle(sticker.id)} />}<span>{sticker.code}</span></label>
         <small>{sticker.street.name}{sticker.street.association?.name ? ` · ${sticker.street.association.name}` : ''}</small>
         <div className="vehicle-sticker" ref={(node) => { stickerRefs.current[sticker.id] = node; }}>
-          <div className="sticker-code"><b>{sticker.code.split('-')[1]}</b><strong>{String(sticker.sequence).padStart(4, '0')}</strong></div>
+          <div className="sticker-code"><b>{sticker.code.split('-')[1]}</b><strong>{String(sticker.sequence).padStart(3, '0')}</strong></div>
           <div className="sticker-qr">
             <QRCode value={`${window.location.origin}/?sticker=${encodeURIComponent(sticker.code)}`} size={112} bgColor="#ffffff" fgColor="#080808" />
             <span className="sticker-visible-code">{sticker.code}</span>
