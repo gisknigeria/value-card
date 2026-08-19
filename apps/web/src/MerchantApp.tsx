@@ -89,11 +89,11 @@ import {
 const MERCHANT_TOKEN_KEY = 'bodija-merchant-token';
 
 // ── Brand ─────────────────────────────────────────────────────────────
-function MerchantBrand() {
+function MerchantBrand({ businessName }: { businessName?: string }) {
   return (
     <div className="admin-brand">
       <div className="brand-mark"><span>B</span></div>
-      <div><strong>Merchant Portal</strong><small>Bodija Value Card</small></div>
+      <div><strong className={businessName ? 'merchant-sidebar-name' : undefined}>{businessName || 'Merchant Portal'}</strong><small>Bodija Value Card</small></div>
     </div>
   );
 }
@@ -1376,7 +1376,7 @@ function MerchantDashboard({ session, logout }: { session: MerchantSession; logo
       )}
 
       <aside className="portal-sidebar">
-        <div className="portal-sidebar-brand"><MerchantBrand /></div>
+        <div className="portal-sidebar-brand"><MerchantBrand businessName={m.businessName} /></div>
         <nav className="portal-nav" aria-label="Merchant navigation">
           {merchantNav.map(({ id, label, icon: Icon, visible = true, badge }) => visible && <button key={id} className={view === id ? 'active' : ''} onClick={() => { setView(id); if (id === 'walkins') setPendingWalkIns(0); }}><Icon size={18} /><span>{label}</span>{Boolean(badge) && <em>{badge}</em>}</button>)}
         </nav>
