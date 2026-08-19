@@ -185,10 +185,16 @@ export default function AuthScreen({ onAuthenticated, onMerchantAuthenticated, d
             <p>{mode === 'login' ? 'Sign in with your email address or phone number.' : role === 'resident' ? 'Use the code on the community sticker issued for your street.' : 'Your application will be reviewed by BERA before going live.'}</p>
           </div>
 
-          <div className="auth-tabs" role="tablist" aria-label="Account type">
-            <button type="button" className={role === 'resident' ? 'active' : ''} onClick={() => { setRole('resident'); setError(''); }}>Resident</button>
-            <button type="button" className={role === 'merchant' ? 'active' : ''} onClick={() => { setRole('merchant'); setError(''); }}>Merchant</button>
-          </div>
+          <label className="auth-account-type">
+            <span>Continue as</span>
+            <div className="auth-input">
+              <UserRound size={18} />
+              <select value={role} onChange={event => { setRole(event.target.value as Role); setError(''); }}>
+                <option value="resident">Resident</option>
+                <option value="merchant">Merchant</option>
+              </select>
+            </div>
+          </label>
 
           <div className="auth-tabs" role="tablist" aria-label="Account action">
             <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => changeMode('login')}>Sign in</button>
