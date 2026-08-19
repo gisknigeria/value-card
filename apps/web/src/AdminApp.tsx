@@ -1317,6 +1317,11 @@ interface StreetStickerItem {
   resident: { id: string; fullName: string } | null;
 }
 
+function stickerFileName(sticker: StreetStickerItem) {
+  const streetName = sticker.street.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+  return `${streetName || 'street'}-${String(sticker.sequence).padStart(4, '0')}`;
+}
+
 interface StickerStreet {
   id: string;
   name: string;
@@ -1481,10 +1486,10 @@ function StickerExportsPanel({ token }: { token: string }) {
         const canvas = await html2canvas(node, { scale: 3, backgroundColor: '#ffffff', useCORS: true });
         if (zip) {
           const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Unable to render sticker image')), 'image/png'));
-          zip.file(`${sticker.code}.png`, blob);
+          zip.file(`${stickerFileName(sticker)}.png`, blob);
         } else {
           const link = document.createElement('a');
-          link.download = `bodija-street-sticker-${sticker.code}.png`;
+          link.download = `${stickerFileName(sticker)}.png`;
           link.href = canvas.toDataURL('image/png');
           link.click();
         }
