@@ -1,5 +1,5 @@
 /* Purple sticker code accent */
-.sticker-code b,.sticker-code strong{background:#70459a!important}
+.sticker-code b,.sticker-code strong{background:#f97316!important}
 :root{--text:#173443;--page:#eef4f7;--surface:#fff;--line:#d7e3e8;--forest:#0b3b4b;--forest-2:#14667b;--gold:#d49a41;--muted:#657b87;--shadow-sm:0 3px 12px rgba(10,45,61,.07);--shadow-md:0 18px 42px rgba(10,45,61,.11);--shadow-lg:0 30px 90px rgba(7,35,48,.2)}
 html{scroll-behavior:smooth}body{color:var(--text);line-height:1.5;background:radial-gradient(circle at 90% -10%,rgba(47,145,166,.11),transparent 32rem),var(--page)}
 button,a,input,select,textarea{transition:.18s ease}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid rgba(36,133,155,.23);outline-offset:2px}
