@@ -170,6 +170,11 @@ export default function AuthScreen({ onAuthenticated, onMerchantAuthenticated, d
             <p>{mode === 'login' ? 'Sign in with your email address or phone number. We will take you to the correct portal.' : role === 'resident' ? 'Use the code on the community sticker issued for your street.' : 'Your application will be reviewed by BERA before going live.'}</p>
           </div>
 
+          <div className="auth-tabs" role="tablist" aria-label="Account action">
+            <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => changeMode('login')}>Sign in</button>
+            <button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => changeMode('register')}>Register</button>
+          </div>
+
           {mode === 'register' && (
             <label className="auth-account-type">
               <span>Register as</span>
@@ -182,11 +187,6 @@ export default function AuthScreen({ onAuthenticated, onMerchantAuthenticated, d
               </div>
             </label>
           )}
-
-          <div className="auth-tabs" role="tablist" aria-label="Account action">
-            <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => changeMode('login')}>Sign in</button>
-            <button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => changeMode('register')}>Register</button>
-          </div>
 
           <form className="auth-form" onSubmit={submit}>
             {mode === 'register' && role === 'resident' && (

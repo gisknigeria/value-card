@@ -388,15 +388,23 @@ input[type="checkbox"],input[type="radio"]{accent-color:var(--orange-600)!import
 .auth-kicker,.admin-login-context>div>span{color:#fed7aa!important}
 .auth-trust span{border-color:rgba(255,237,213,.24)!important;color:#fff1e6!important;background:rgba(255,255,255,.07)!important}
 .auth-panel,.admin-login-form,.merchant-auth-panel{background:#f8f0e8!important}
-.auth-form-wrap,.admin-login-form form,.merchant-auth-form{border-color:#ead5c5!important;background:linear-gradient(145deg,#fffaf5 0%,#fdf4eb 100%)!important;box-shadow:0 24px 64px rgba(86,38,17,.12)!important}
+.auth-form-wrap,.admin-login-form form,.merchant-auth-form{border:0!important;background:transparent!important;box-shadow:none!important}
 .auth-form-wrap .auth-input,.admin-login-form form .auth-input,.merchant-auth-form .auth-input{border-color:#e5d2c4!important;background:#fffdfb!important}
-.auth-form-wrap .auth-tabs,.admin-login-form form .auth-tabs,.merchant-auth-form .auth-tabs{background:#f2e6dc!important}
+.auth-form-wrap .auth-tabs,.admin-login-form form .auth-tabs,.merchant-auth-form .auth-tabs{background:#efe2d7!important}
 .auth-form-wrap .auth-note,.admin-login-form form .auth-note,.merchant-auth-form .auth-note{border-color:#ead9cb!important;background:#f6ede5!important;color:#755b4f!important}
 .auth-brand .brand-mark,.auth-mobile-brand .brand-mark{color:var(--orange-800)!important;background:#fff8f1!important;box-shadow:0 8px 22px rgba(73,27,10,.18)!important}
 .auth-form-wrap .auth-submit,.admin-login-form form>button:not(.text-button),.merchant-auth-form .merchant-submit{border:1px solid var(--orange-700)!important;color:#fff!important;background:linear-gradient(135deg,var(--orange-600),var(--orange-700))!important;box-shadow:0 12px 24px rgba(194,65,12,.20)!important}
 .auth-form-wrap .auth-submit:hover,.admin-login-form form>button:not(.text-button):hover,.merchant-auth-form .merchant-submit:hover{border-color:var(--orange-800)!important;background:linear-gradient(135deg,var(--orange-700),var(--orange-800))!important;box-shadow:0 15px 28px rgba(154,52,18,.24)!important}
 .auth-form-wrap .demo-login,.admin-login-form form .demo-login,.merchant-auth-form .demo-login{border:1px solid #ead9cb!important;color:#755b4f!important;background:#f4eae1!important}
 .auth-form-wrap .text-button,.admin-login-form form .text-button,.merchant-auth-form .text-button{color:var(--orange-700)!important}
+.auth-account-type{display:grid!important;gap:8px!important;margin:0 0 22px!important}
+.auth-account-type>span{color:#684d40!important;font-size:12px!important;font-weight:750!important}
+
+@media(max-width:620px){
+  .auth-panel,.admin-login-form,.merchant-auth-panel{padding-inline:22px!important}
+  .auth-form-wrap,.admin-login-form form,.merchant-auth-form{width:100%!important;padding:0!important;margin:0!important}
+  .auth-heading h2,.admin-login-form h2{font-size:clamp(31px,9vw,38px)!important}
+}
 .portal-role-lockup{border-color:#f1c39d!important;color:var(--orange-800)!important;background:var(--orange-50)!important}.portal-role-lockup small{color:var(--orange-700)!important}
 
 /* Membership and programme cards */
