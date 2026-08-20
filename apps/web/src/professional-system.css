@@ -387,8 +387,16 @@ input[type="checkbox"],input[type="radio"]{accent-color:var(--orange-600)!import
 .auth-message p,.admin-login-context p,.merchant-auth-context p{color:#f7ded0!important}
 .auth-kicker,.admin-login-context>div>span{color:#fed7aa!important}
 .auth-trust span{border-color:rgba(255,237,213,.24)!important;color:#fff1e6!important;background:rgba(255,255,255,.07)!important}
-.auth-panel,.admin-login-form,.merchant-auth-panel{background:#fbf7f2!important}
-.auth-form-wrap,.admin-login-form form,.merchant-auth-form{border-color:#eaded3!important;background:rgba(255,255,255,.97)!important;box-shadow:0 24px 64px rgba(86,38,17,.14)!important}
+.auth-panel,.admin-login-form,.merchant-auth-panel{background:#f8f0e8!important}
+.auth-form-wrap,.admin-login-form form,.merchant-auth-form{border-color:#ead5c5!important;background:linear-gradient(145deg,#fffaf5 0%,#fdf4eb 100%)!important;box-shadow:0 24px 64px rgba(86,38,17,.12)!important}
+.auth-form-wrap .auth-input,.admin-login-form form .auth-input,.merchant-auth-form .auth-input{border-color:#e5d2c4!important;background:#fffdfb!important}
+.auth-form-wrap .auth-tabs,.admin-login-form form .auth-tabs,.merchant-auth-form .auth-tabs{background:#f2e6dc!important}
+.auth-form-wrap .auth-note,.admin-login-form form .auth-note,.merchant-auth-form .auth-note{border-color:#ead9cb!important;background:#f6ede5!important;color:#755b4f!important}
+.auth-brand .brand-mark,.auth-mobile-brand .brand-mark{color:var(--orange-800)!important;background:#fff8f1!important;box-shadow:0 8px 22px rgba(73,27,10,.18)!important}
+.auth-form-wrap .auth-submit,.admin-login-form form>button:not(.text-button),.merchant-auth-form .merchant-submit{border:1px solid var(--orange-700)!important;color:#fff!important;background:linear-gradient(135deg,var(--orange-600),var(--orange-700))!important;box-shadow:0 12px 24px rgba(194,65,12,.20)!important}
+.auth-form-wrap .auth-submit:hover,.admin-login-form form>button:not(.text-button):hover,.merchant-auth-form .merchant-submit:hover{border-color:var(--orange-800)!important;background:linear-gradient(135deg,var(--orange-700),var(--orange-800))!important;box-shadow:0 15px 28px rgba(154,52,18,.24)!important}
+.auth-form-wrap .demo-login,.admin-login-form form .demo-login,.merchant-auth-form .demo-login{border:1px solid #ead9cb!important;color:#755b4f!important;background:#f4eae1!important}
+.auth-form-wrap .text-button,.admin-login-form form .text-button,.merchant-auth-form .text-button{color:var(--orange-700)!important}
 .portal-role-lockup{border-color:#f1c39d!important;color:var(--orange-800)!important;background:var(--orange-50)!important}.portal-role-lockup small{color:var(--orange-700)!important}
 
 /* Membership and programme cards */
@@ -437,6 +445,22 @@ input[type="checkbox"],input[type="radio"]{accent-color:var(--orange-600)!import
 .admin-row-actions button.approve{border-color:#4f7c61!important;color:#fff!important;background:#4f7c61!important}
 .sos-button{background:linear-gradient(135deg,#c2410c,#a61b16)!important}
 .loading-spinner{border-color:rgba(194,65,12,.18)!important;border-top-color:var(--orange-700)!important}
+
+/* Shared UX polish across every authenticated page. */
+button:disabled,[aria-disabled="true"]{cursor:not-allowed!important;opacity:.58;box-shadow:none!important;transform:none!important}
+.page-content,.portal-content,.admin-main{container-type:inline-size}
+.section-title,.merchant-page-head,.admin-title{gap:16px}
+.section-title p,.merchant-page-head p,.admin-title p{max-width:68ch}
+.admin-workspace,.admin-table-wrap,.activity-table,.directory-list{scrollbar-color:#d6b7a2 transparent;scrollbar-width:thin}
+.admin-table{border-collapse:separate;border-spacing:0;width:100%}
+.admin-table th{position:sticky;top:0;z-index:2;white-space:nowrap}
+.admin-table th,.admin-table td{padding-block:13px}
+.admin-table tbody tr:last-child td{border-bottom:0}
+.profile-form label>span:first-child,.modal-reason-label>span,.association-rep-fields label>span{color:#684d40!important;font-weight:750!important}
+.profile-form input::placeholder,.auth-input input::placeholder,.admin-search input::placeholder{color:#a99489!important;opacity:1}
+.modal-actions{gap:10px;padding-top:18px}
+.notif-panel{border-left-color:var(--line)!important;background:#fffaf6!important;box-shadow:-20px 0 56px rgba(69,34,20,.16)!important}
+.notification-count,.portal-nav button em,.portal-mobile-actions em{background:#b42318!important}
 
 /* Dialogs, drawers and issuance */
 .modal-backdrop{background:rgba(50,24,15,.52)!important}
