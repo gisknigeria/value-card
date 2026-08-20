@@ -317,3 +317,144 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* 2026 warm-orange redesign. This final layer unifies resident, merchant and
+   administrator experiences. The separate security build is unaffected. */
+:root {
+  --ink:#32180f; --text:#4a2a1d; --muted:#7c685f; --page:#f8f3ed;
+  --surface:#fff; --surface-soft:#fff9f3; --line:#eaded3;
+  --forest:#7c2d12; --forest-2:#9a3412; --primary:#c2410c;
+  --primary-2:#ea580c; --gold:#f59e0b; --accent:#f97316;
+  --success:#4f7c61; --danger:#b42318;
+  --orange-50:#fff7ed; --orange-100:#ffedd5; --orange-200:#fed7aa;
+  --orange-300:#fdba74; --orange-500:#f97316; --orange-600:#ea580c;
+  --orange-700:#c2410c; --orange-800:#9a3412; --orange-900:#7c2d12;
+  --shadow-sm:0 1px 3px rgba(69,34,20,.05),0 8px 22px rgba(69,34,20,.045);
+  --shadow-md:0 16px 38px rgba(69,34,20,.10);
+  --shadow-lg:0 28px 72px rgba(50,24,15,.20);
+}
+html,body,.app-shell,.admin-shell,.portal-shell{color:var(--text)!important;background:var(--page)!important}
+body{background-image:radial-gradient(circle at 100% 0,rgba(249,115,22,.07),transparent 28rem),linear-gradient(180deg,#fbf7f2 0%,var(--page) 38%)!important}
+h1,h2,h3,h4,h5,h6,.brand strong,.admin-brand strong,.merchant-brand strong{color:var(--ink)}
+p{color:var(--muted)}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline-color:rgba(234,88,12,.30)!important}
+
+/* Controls */
+.primary-button,.auth-submit,.merchant-submit,button.primary{border-color:var(--orange-700)!important;color:#fff!important;background:linear-gradient(135deg,var(--orange-600),var(--orange-700))!important;box-shadow:0 9px 20px rgba(194,65,12,.20)!important}
+.primary-button:hover,.auth-submit:hover,.merchant-submit:hover,button.primary:hover{border-color:var(--orange-800)!important;background:linear-gradient(135deg,var(--orange-700),var(--orange-800))!important;box-shadow:0 12px 26px rgba(154,52,18,.24)!important}
+.secondary-button,.outline-button,button.ghost{border-color:#dfcfc2!important;color:#68351f!important;background:#fff!important}
+.secondary-button:hover,.outline-button:hover,button.ghost:hover{border-color:var(--orange-300)!important;color:var(--orange-800)!important;background:var(--orange-50)!important}
+.text-button,a.text-button{color:var(--orange-700)!important}
+.auth-input,.search-field,.select-wrap,.admin-search,.admin-filter,.profile-form input,.profile-form select,.profile-form textarea,.association-rep-fields input,.association-rep-fields select,.sticker-generator select,.sticker-generator input{border-color:#decfc4!important;color:var(--text)!important;background:#fff!important}
+.auth-input:focus-within,.search-field:focus-within,.select-wrap:focus-within,.admin-search:focus-within,.admin-filter:focus-within,.profile-form input:focus,.profile-form select:focus,.profile-form textarea:focus{border-color:var(--orange-500)!important;box-shadow:0 0 0 3px rgba(249,115,22,.12)!important}
+input[type="checkbox"],input[type="radio"]{accent-color:var(--orange-600)!important}
+
+/* Navigation */
+.sidebar,.portal-sidebar{color:#fff!important;background:radial-gradient(circle at 15% 0,rgba(253,186,116,.13),transparent 18rem),linear-gradient(180deg,#4a1f10 0%,#7c2d12 55%,#431a0e 100%)!important;border-right-color:rgba(255,237,213,.13)!important;box-shadow:16px 0 40px rgba(70,28,11,.13)!important}
+.brand-mark,.portal-sidebar .brand-mark,.portal-mobile-header .brand-mark,.admin-header .brand-mark{color:#682d14!important;background:linear-gradient(135deg,#ffedd5,#fdba74)!important;box-shadow:0 8px 20px rgba(45,17,7,.20)!important}
+.sidebar .brand strong,.sidebar .brand small,.portal-sidebar .admin-brand strong,.portal-sidebar .merchant-brand strong{color:#fff!important}
+.sidebar .brand small,.portal-sidebar .admin-brand small,.portal-sidebar .merchant-brand small{color:#f8d9c2!important}
+.main-nav button,.sidebar-foot>button,.portal-nav button{color:#efd5c6!important}
+.main-nav button svg,.portal-nav button svg{color:#dda88c!important}
+.main-nav button:hover,.sidebar-foot>button:hover,.portal-nav button:hover{color:#fff!important;background:rgba(255,247,237,.09)!important}
+.main-nav button.active,.portal-nav button.active{color:#fff!important;background:linear-gradient(90deg,rgba(249,115,22,.26),rgba(255,247,237,.09))!important;box-shadow:inset 3px 0 var(--orange-300)!important}
+.main-nav button.active svg,.portal-nav button.active svg{color:#fed7aa!important}
+.sidebar-foot,.resident-mini,.portal-sidebar-footer,.portal-sidebar-brand,.portal-quick-actions{border-color:rgba(255,237,213,.13)!important}
+.resident-mini,.portal-sidebar-footer{background:rgba(255,247,237,.065)!important}
+.avatar,.top-avatar,.portal-user-avatar{color:#682d14!important;background:linear-gradient(135deg,#ffedd5,#fdba74)!important}
+
+/* Chrome, content surfaces and hierarchy */
+.topbar,.admin-header{border-color:var(--line)!important;background:rgba(255,252,248,.94)!important;box-shadow:0 1px 0 rgba(91,45,23,.03)!important}
+.admin-header{background:linear-gradient(90deg,#4a1f10,#7c2d12)!important}
+.admin-header .admin-brand strong{color:#fff!important}.admin-header .admin-brand small{color:#f7d3bd!important}
+.eyebrow,.admin-title>div:first-child>span,.sticker-intro>div:first-child>span{color:var(--orange-700)!important}
+.welcome-line,.section-block,.metrics,.metric,.profile-form,.directory-intro,.activity-list,.activity-item,.directory-list,.offer-strip,.card-detail-panel,.verification-note,.approval-timeline,.admin-metric,.admin-workspace,.admin-table-wrap,.dependant-card,.role-card-shell,.sticker-workspace,.approval-gate-status,.overview-card-lead{border-color:var(--line)!important;background:#fff!important;box-shadow:var(--shadow-sm)!important}
+.metric:hover,.admin-metric:hover,.dependant-card:hover{border-color:#efd0ba!important;box-shadow:var(--shadow-md)!important}
+.admin-toolbar,.table-head,.admin-list-head,.admin-table th,.association-rep-form,.sticker-toolbar{border-color:var(--line)!important;color:#765e52!important;background:var(--surface-soft)!important}
+.benefit-row:hover,.table-row:hover,.admin-resident-row:hover,.admin-table tbody tr:hover{background:var(--orange-50)!important}
+.admin-live{border-color:#e6d5c8!important;color:#6d584e!important;background:#fff!important}.admin-live i{background:var(--success)!important}
+.auth-tabs,.admin-section-tabs,.sticker-tabs{border-color:var(--line)!important;background:#f6eee7!important}
+.auth-tabs button,.admin-section-tabs button,.sticker-tabs button{color:#765d51!important}
+.auth-tabs button.active{color:var(--orange-800)!important;background:#fff!important;box-shadow:0 3px 10px rgba(91,45,23,.10)!important}
+.admin-section-tabs button.active,.admin-status-tabs button.active,.sticker-tabs button.active{border-color:var(--orange-700)!important;color:#fff!important;background:var(--orange-800)!important;box-shadow:0 8px 18px rgba(124,45,18,.17)!important}
+
+/* Authentication */
+.auth-page,.admin-login-page,.merchant-auth-page{background:#5f250f!important}
+.auth-context,.admin-login-context,.merchant-auth-context{color:#fff!important;background:radial-gradient(circle at 88% 12%,rgba(255,237,213,.22) 0 4%,transparent 4.5%),radial-gradient(circle at 88% 12%,transparent 0 14%,rgba(255,237,213,.10) 14.2% 14.6%,transparent 14.8%),linear-gradient(145deg,#4a1f10 0%,#9a3412 60%,#c2410c 100%)!important}
+.auth-context:before,.admin-login-context:before{border-color:rgba(255,237,213,.16)!important;background:transparent!important;box-shadow:0 0 0 72px rgba(255,237,213,.035),0 0 0 144px rgba(255,237,213,.02)!important}
+.auth-context:after,.admin-login-context:after{background:none!important;opacity:0!important}
+.auth-message h1,.admin-login-context h1,.merchant-auth-context h1{color:#fff!important}
+.auth-message p,.admin-login-context p,.merchant-auth-context p{color:#f7ded0!important}
+.auth-kicker,.admin-login-context>div>span{color:#fed7aa!important}
+.auth-trust span{border-color:rgba(255,237,213,.24)!important;color:#fff1e6!important;background:rgba(255,255,255,.07)!important}
+.auth-panel,.admin-login-form,.merchant-auth-panel{background:#fbf7f2!important}
+.auth-form-wrap,.admin-login-form form,.merchant-auth-form{border-color:#eaded3!important;background:rgba(255,255,255,.97)!important;box-shadow:0 24px 64px rgba(86,38,17,.14)!important}
+.portal-role-lockup{border-color:#f1c39d!important;color:var(--orange-800)!important;background:var(--orange-50)!important}.portal-role-lockup small{color:var(--orange-700)!important}
+
+/* Membership and programme cards */
+.value-card,.admin-card-render{border-color:rgba(253,186,116,.78)!important;color:#fff!important;background:radial-gradient(circle at 92% 8%,rgba(255,237,213,.15),transparent 10rem),linear-gradient(145deg,#431a0e 0%,#7c2d12 54%,#9a3412 100%)!important;box-shadow:0 25px 58px rgba(83,31,12,.27)!important}
+.value-card:before,.admin-card-render:before{border-color:rgba(253,186,116,.52)!important}
+.value-card:after,.admin-card-render:after{border-color:rgba(255,237,213,.20)!important}
+.card-programme-title>span,.card-programme-title small,.member-details small,.card-bottom small,.admin-card-head span,.admin-card-head small,.admin-card-member small,.admin-card-foot small{color:#fed7aa!important}
+.card-programme-title strong,.member-details h2,.member-details span,.card-bottom strong,.admin-card-head strong,.admin-card-member h3,.admin-card-member span,.admin-card-foot strong{color:#fff!important}
+.card-bottom,.admin-card-foot{border-color:rgba(254,215,170,.34)!important}
+.qr,.admin-card-qr,.role-card-qr{border-color:#fdba74!important;background:#fff!important}
+.card-active{border-color:rgba(255,237,213,.28)!important;color:#fff!important;background:rgba(255,255,255,.11)!important}
+.role-card-shell{color:#fff!important;background:linear-gradient(145deg,#4a1f10,#8d3215)!important;border-color:#d9773d!important}
+.role-card-shell .role-card-details,.role-card-shell .role-card-details strong{color:#fff!important}
+.role-card-shell .role-card-details>small,.role-card-shell .role-card-details p,.role-card-shell>p{color:#f6d6c2!important}
+/* Role variants stay distinguishable through orange depth, not unrelated hues. */
+.value-card.value-card-resident,
+.value-card.card-theme-resident,.admin-card-render.card-theme-resident,
+.value-card.card-theme-homeowner,.admin-card-render.card-theme-homeowner,
+.value-card.card-theme-tenant,.admin-card-render.card-theme-tenant,
+.value-card.card-theme-household,.admin-card-render.card-theme-household,
+.value-card.card-theme-leadership,.admin-card-render.card-theme-leadership{
+  --card-accent:#fdba74;--card-soft:#fed7aa;--card-rule:rgba(254,215,170,.36);
+  border-color:rgba(253,186,116,.78)!important;
+  background:radial-gradient(circle at 92% 8%,rgba(255,237,213,.15),transparent 10rem),linear-gradient(145deg,#431a0e 0%,#7c2d12 54%,#9a3412 100%)!important;
+  box-shadow:0 25px 58px rgba(83,31,12,.27)!important;
+}
+.value-card.card-theme-homeowner,.admin-card-render.card-theme-homeowner{background:linear-gradient(145deg,#4a1f10 0%,#8d3215 58%,#b54712 100%)!important}
+.value-card.card-theme-tenant,.admin-card-render.card-theme-tenant{background:linear-gradient(145deg,#54220d 0%,#a43b0c 58%,#c95a12 100%)!important}
+.value-card.card-theme-household,.admin-card-render.card-theme-household{background:linear-gradient(145deg,#3f1d12 0%,#74321c 58%,#9d4825 100%)!important}
+.value-card.card-theme-leadership,.admin-card-render.card-theme-leadership{background:linear-gradient(145deg,#32150b 0%,#6e260d 58%,#92350f 100%)!important}
+.dependant-card.dependant-member-card{border-color:#f0c5a6!important;background:linear-gradient(135deg,#fff9f3,#ffead8)!important;box-shadow:inset 4px 0 var(--orange-500),var(--shadow-sm)!important}
+.dependant-member-card .dependant-avatar{color:var(--orange-800)!important;background:var(--orange-100)!important}
+.role-card-shell.role-card-merchant-owner,.role-card-shell.role-card-merchant-staff,.role-card-shell.role-card-admin{border-color:#d9773d!important;background:linear-gradient(145deg,#4a1f10,#8d3215)!important;box-shadow:0 22px 48px rgba(83,31,12,.24)!important}
+.role-card-merchant-staff .role-card-details>small,.role-card-merchant-staff .role-card-details p,.role-card-merchant-staff>p,.role-card-admin .role-card-details>small,.role-card-admin .role-card-details p,.role-card-admin>p{color:#f6d6c2!important}
+.role-card-merchant-staff .role-card-qr,.role-card-admin .role-card-qr{border-color:#fdba74!important}
+
+/* Orange-led data accents; green and red remain reserved for status meaning. */
+.metric-icon,.admin-metric>span,.merchant-logo,.activity-icon,.modal-icon,.admin-avatar,.dependant-avatar{color:var(--orange-800)!important;background:var(--orange-100)!important}
+.metric-icon.savings,.metric-icon.rewards,.metric-icon.visits,.metric-icon.renewal,.merchant-logo.green,.merchant-logo.coral,.merchant-logo.blue,.merchant-logo.violet,.merchant-logo.gold{color:var(--orange-800)!important;background:var(--orange-100)!important}
+.positive,.activity-saving strong,.benefit-value strong{color:var(--orange-700)!important}
+.admin-status.pending{color:#8a4b08!important;background:#fff1d6!important}
+.admin-status.approved,.admin-status.active{color:#356348!important;background:#e9f4ed!important}
+.admin-status.rejected,.admin-status.flagged{color:#9f2d25!important;background:#fdecea!important}
+.admin-status.suspended,.admin-status.paused{color:#6e4937!important;background:#f2e8e2!important}
+.admin-row-actions button{border-color:#e2d2c6!important;color:#6e4937!important;background:#fff!important}
+.admin-row-actions button.approve{border-color:#4f7c61!important;color:#fff!important;background:#4f7c61!important}
+.sos-button{background:linear-gradient(135deg,#c2410c,#a61b16)!important}
+.loading-spinner{border-color:rgba(194,65,12,.18)!important;border-top-color:var(--orange-700)!important}
+
+/* Dialogs, drawers and issuance */
+.modal-backdrop{background:rgba(50,24,15,.52)!important}
+.modal-card,.overview-card-dialog{border-color:var(--line)!important;background:#fff!important;box-shadow:var(--shadow-lg)!important}
+.overview-card-backdrop{background:rgba(50,24,15,.68)!important}
+.overview-card-dialog-head,.overview-card-dialog-actions,.approval-gate-header{border-color:var(--line)!important;background:#fff!important}
+.approval-gate-shell{background:linear-gradient(145deg,#fbf6f0,#fffaf5)!important}
+.approval-gate-icon{color:var(--orange-800)!important;background:var(--orange-100)!important}
+.sticker-workspace{background:rgba(255,255,255,.92)!important}
+.sticker-record{border-color:var(--line)!important;background:#fff!important}
+.sticker-record.selected{border-color:var(--orange-500)!important;box-shadow:0 10px 24px rgba(194,65,12,.14)!important}
+.sticker-code b,.sticker-code strong{background:var(--orange-700)!important}
+
+@media(max-width:820px){
+  .portal-mobile-header{background:linear-gradient(90deg,#4a1f10,#8d3215)!important;box-shadow:0 10px 30px rgba(83,31,12,.20)!important}
+  .portal-sidebar{border-top-color:var(--line)!important;background:rgba(255,252,248,.98)!important;box-shadow:0 -12px 34px rgba(83,31,12,.12)!important}
+  .portal-nav button{color:#765d51!important}.portal-nav button svg{color:#9b7868!important}
+  .portal-nav button:hover{color:var(--orange-800)!important;background:var(--orange-50)!important}
+  .portal-nav button.active{color:#fff!important;background:linear-gradient(180deg,var(--orange-600),var(--orange-800))!important;box-shadow:0 10px 24px rgba(154,52,18,.22)!important}
+  .portal-nav button.active svg{color:#fff!important}
+}
